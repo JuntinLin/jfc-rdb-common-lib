@@ -48,4 +48,18 @@ public interface SfbRepository extends JpaRepository<SfbFile, String> {
 			AND s.sfb87 = 'Y'
 			""")
 	BigDecimal findWipOutsourcingAmount(@Param("mano") String mano);
+	
+	// sfb08 number(15,3) 生產數量   - planned production quantity
+	// sfb09 number(15,3) 完工入庫數量 - completed/stored quantity
+	// A work order is considered finished when sfb09 and sfb08 are both non-null
+	// and the completed quantity (sfb09) has met or exceeded the planned quantity (sfb08).
+	@Query("""
+	        SELECT COUNT(s) > 0
+	        FROM SfbFile s
+	        WHERE s.sfb01 = :sfb01
+	        AND s.sfb08 IS NOT NULL
+	        AND s.sfb09 IS NOT NULL
+	        AND s.sfb09 >= s.sfb08
+	        """)
+	boolean isFinished(@Param("sfb01") String sfb01);
 }

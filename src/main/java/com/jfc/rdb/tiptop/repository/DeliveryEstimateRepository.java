@@ -1,0 +1,270 @@
+package com.jfc.rdb.tiptop.repository;
+
+import java.util.Date;
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import com.jfc.rdb.tiptop.entity.OebFile;
+import com.jfc.rdb.tiptop.entity.OebFilePK;
+
+/**
+ * 出貨預估統計 Repository
+ * 
+ * 提供出貨預估相關的資料庫查詢
+ */
+@Repository
+public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFilePK> {
+    
+    /**
+     * 查詢未出貨訂單
+     * oeb12	number(15,3)	數量
+     * oeb24	number(15,3)	已出貨數量
+     * oea49	varchar2(1)	狀況碼	狀況碼: 0: 開立(Open) 1: 已核准 S: 送簽                 #No.6686 R: 送簽退回 W: 抽單 
+     * oeaconf	varchar2(1)	確認否	確認否 (Y/N/X) 
+     * oeb70	varchar2(1)	結案否	結案否 (Y/N)
+     * oeb15	date	約定交貨日
+     * ta_oeb15	date	展延交期
+     * oebud10	number(10)	設計狀態碼	-1.免出圖 0.未指派 1.已指派 2.確認中 3.執行中 4.完成
+     * 
+     * 條件:
+     * - 未出貨數量 > 0 (oeb12 - oeb24 > 0)
+     * - 訂單狀態為有效 (oea49 in 0, 1, S)
+     * - 訂單已確認 (oeaconf = Y)
+     * - 非取消項目 (oeb70 != Y)
+     * - 約定交貨日在指定範圍內 (oeb15 between startDate and endDate)
+     * 
+     * @param startDate 起始日期
+     * @param endDate 結束日期
+     * @return 未出貨訂單列表
+     */
+    @Query(value = """
+        SELECT 
+            oeb.oeb01,
+            oeb.oeb03,	-- 項次
+            oea.oea03,	-- 帳款客戶編號 occ01   MISC: 雜項客戶, 可輸入簡稱,統一編號
+            oea.oea032,	-- 帳款客戶簡稱
+            imz.imz02 as productType, --分群碼
+            ima.ima09 as spl, --分群碼1 row[5]
+            ima.ima02,
+            ima.ima021,
+            oea.oea02,
+            oeb.oeb15,
+            oeb.oeb12,	--row[10]
+            oeb.oeb24,	--row[11]
+            oeb.oeb13,	--row[12]
+            COALESCE(stk.stockAmount, 0) as stockAmount,
+            oeb.oebud10, 
+            oeb.oebud15,
+            sfb.sfb01, 	--row[16]
+            gen.gen02 as creator,
+            oea.oea24,	--匯率 row[18]
+            COALESCE(sfb.sfb09, 0) as sfb09, --row[19]
+            COALESCE(sfb.sfb08, 0) as sfb08,
+            pmo.tc_pmo01 AS mergeWorkOrderNo,	--row[21]
+            sfw.sfw01,
+            oeb.ta_oeb15 AS extendedDeliveryDate, -- row[23]
+            ogb.ogb12 as ogb12, -- row[24] ogb12	number(15,3)	實際出貨數量
+            sales.gen02 as salesman,
+            occ.occ03 as custIndustry,    -- row[26] 行業別
+            occ.occ21 as custCountry,     -- row[27] 國別
+            occ.occud06 as custUd06,      -- row[28] 自訂欄位06
+            occ03 || '-' || oca02 as customerCategory,  -- row[29]
+            occ21 || '-' || geb02 as countryName,       -- row[30]
+            occ.occ04 as salesmanCode                    -- row[31] 負責業務員編號
+        FROM oeb_file oeb
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        LEFT JOIN occ_file occ on occ.occ01 = oea.oea03
+        LEFT JOIN oca_file oca on occ.occ03 = oca.oca01
+        LEFT JOIN geb_file geb on occ.occ21 = geb.geb01
+        LEFT JOIN gen_file sales on sales.gen01 = occ.occ04
+        LEFT JOIN ima_file ima ON ima.ima01 = oeb.oeb04
+        LEFT JOIN imz_file imz ON ima.ima06 = imz.imz01
+        LEFT JOIN gen_file gen ON gen.gen01 = oea.oeaoriu
+        LEFT JOIN sfb_file sfb ON sfb.sfb22 = oeb.oeb01 AND sfb.sfb221 = oeb.oeb03 AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
+        LEFT JOIN tc_pmo_file pmo ON (oeb.oeb01 || '-' || oeb.oeb03) = pmo.tc_pmo05 AND pmo.tc_pmo01 LIKE 'T51%' and pmo.tc_pmo02 = 0
+        LEFT JOIN (
+    		SELECT MIN(sfw01) as sfw01, sfw03
+    		FROM sfw_file
+    		GROUP BY sfw03
+    	) sfw ON sfw.sfw03 LIKE '%' || oeb.oeb01 || '%'
+        LEFT JOIN (
+            SELECT img01, SUM(img10) as stockAmount
+            FROM img_file
+            WHERE img23 = 'Y' AND img10 > 0
+            GROUP BY img01
+        ) stk ON stk.img01 = oeb.oeb04
+        LEFT JOIN (
+    		select ogb31, ogb32, sum(ogb12) as ogb12
+			from ogb_file
+			left outer join oga_file on oga01 = ogb01
+			WHERE ogaconf = 'Y' AND oga09 = '2'
+			group by ogb31, ogb32
+        )ogb on ogb.ogb31 = oeb.oeb01 and ogb.ogb32 = oeb.oeb03
+        WHERE oeb.oeb12 - oeb.oeb24 > 0
+          AND oea.oea49 IN ('0', '1', 'S')
+          AND oea.oeaconf = 'Y'
+          AND (oeb.oeb70 IS NULL OR oeb.oeb70 != 'Y')
+          AND COALESCE(oeb.ta_oeb15, oeb.oeb15) BETWEEN :startDate AND :endDate
+        ORDER BY COALESCE(oeb.ta_oeb15, oeb.oeb15), oeb.oeb01, oeb.oeb03
+        """, nativeQuery = true)
+    List<Object[]> findUndeliveryOrders(
+            @Param("startDate") Date startDate, 
+            @Param("endDate") Date endDate);
+    
+    /**
+     * 查詢尚未出圖的未出貨訂單（不限約定交貨日範圍）
+     *
+     * 設計狀態碼 oebud10:
+     *   -1.免出圖  0.未指派  1.已指派  2.確認中  3.執行中  4.完成
+     *
+     * 「尚未出圖」= oebud10 NOT IN (-1, 4)，即非免出圖且非完成
+     *
+     * 回傳欄位與 findUndeliveryOrders 相同（row[0]~row[27]），
+     * 可直接複用 DeliveryEstimateService.mapToOrderItemDTO()
+     *
+     * @return 尚未出圖的未出貨訂單列表
+     */
+    @Query(value = """
+        SELECT
+            oeb.oeb01,
+            oeb.oeb03,
+            oea.oea03,
+            oea.oea032,
+            imz.imz02 as productType,
+            ima.ima09 as spl,
+            ima.ima02,
+            ima.ima021,
+            oea.oea02,
+            oeb.oeb15,
+            oeb.oeb12,
+            oeb.oeb24,
+            oeb.oeb13,
+            COALESCE(stk.stockAmount, 0) as stockAmount,
+            oeb.oebud10,
+            oeb.oebud15,
+            sfb.sfb01,
+            gen.gen02 as creator,
+            oea.oea24,
+            COALESCE(sfb.sfb09, 0) as sfb09,
+            COALESCE(sfb.sfb08, 0) as sfb08,
+            pmo.tc_pmo01 AS mergeWorkOrderNo,
+            sfw.sfw01,
+            oeb.ta_oeb15 AS extendedDeliveryDate,
+            ogb.ogb12 as ogb12,
+            sales.gen02 as salesman,
+            occ.occ03 as custIndustry,
+            occ.occ21 as custCountry,
+            occ.occud06 as custUd06,
+            occ03 || '-' || oca02 as customerCategory,
+            occ21 || '-' || geb02 as countryName
+        FROM oeb_file oeb
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        LEFT JOIN occ_file occ ON occ.occ01 = oea.oea03
+        LEFT JOIN oca_file oca ON occ.occ03 = oca.oca01
+        LEFT JOIN geb_file geb ON occ.occ21 = geb.geb01
+        LEFT JOIN gen_file sales ON sales.gen01 = occ.occ04
+        LEFT JOIN ima_file ima ON ima.ima01 = oeb.oeb04
+        LEFT JOIN imz_file imz ON ima.ima06 = imz.imz01
+        LEFT JOIN gen_file gen ON gen.gen01 = oea.oeaoriu
+        LEFT JOIN sfb_file sfb ON sfb.sfb22 = oeb.oeb01 AND sfb.sfb221 = oeb.oeb03 AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
+        LEFT JOIN tc_pmo_file pmo ON (oeb.oeb01 || '-' || oeb.oeb03) = pmo.tc_pmo05 AND pmo.tc_pmo01 LIKE 'T51%' AND pmo.tc_pmo02 = 0
+        LEFT JOIN (
+            SELECT MIN(sfw01) as sfw01, sfw03
+            FROM sfw_file
+            GROUP BY sfw03
+        ) sfw ON sfw.sfw03 LIKE '%' || oeb.oeb01 || '%'
+        LEFT JOIN (
+            SELECT img01, SUM(img10) as stockAmount
+            FROM img_file
+            WHERE img23 = 'Y' AND img10 > 0
+            GROUP BY img01
+        ) stk ON stk.img01 = oeb.oeb04
+        LEFT JOIN (
+            SELECT ogb31, ogb32, SUM(ogb12) as ogb12
+            FROM ogb_file
+            LEFT OUTER JOIN oga_file ON oga01 = ogb01
+            WHERE ogaconf = 'Y' AND oga09 = '2'
+            GROUP BY ogb31, ogb32
+        ) ogb ON ogb.ogb31 = oeb.oeb01 AND ogb.ogb32 = oeb.oeb03
+        WHERE oeb.oeb12 - oeb.oeb24 > 0
+          AND oea.oea49 IN ('0', '1', 'S')
+          AND oea.oeaconf = 'Y'
+          AND (oeb.oeb70 IS NULL OR oeb.oeb70 != 'Y')
+          AND oeb.oebud10 IS NOT NULL
+          AND oeb.oebud10 NOT IN (-1, 4)
+        ORDER BY oea.oea02, oeb.oeb01, oeb.oeb03
+        """, nativeQuery = true)
+    List<Object[]> findUndesignOrders();
+
+    /**
+     * 查詢已出貨未簽收
+     * 
+     * 條件:
+     * - 單據已確認 (ogaconf = Y)
+     * - 單據別為一般出貨單 (oga09 = 2)
+     * - 需要客戶簽收 (oga65 = Y)
+     * - 未簽收數量 > 0 (ogb12 - ogb50 > 0)
+     * 
+     * @return 已出貨未簽收列表
+     */
+    @Query(value = """
+        SELECT 
+            ogb.ogb01,
+            ogb.ogb03,
+            oga.oga03,
+            oga.oga032,
+            imz.imz02 as productType,
+            ima.ima09 as spl, --分群碼1  row[5]
+            ima.ima02,
+            ima.ima021,
+            oga.oga02,
+            ogb.ogb12,	--row[9]
+            ogb.ogb50,	--row[10]累計簽收數量
+            ogb.ogb13,	--row[11]原幣單價
+            oga.oga24,	--row[12]匯率
+            NVL(ogb.ogb51, 0)	--row[13]累計銷退數量
+        FROM ogb_file ogb
+        INNER JOIN oga_file oga ON oga.oga01 = ogb.ogb01
+        LEFT JOIN ima_file ima ON ima.ima01 = ogb.ogb04
+        LEFT JOIN imz_file imz ON ima.ima06 = imz.imz01
+        WHERE oga.ogaconf = 'Y' --ogaconf	確認否/作廢碼 (Y/N/X) 欄位值:   N.未確認   X.作廢   Y.已確認 
+          AND oga.oga09 = '2'	--oga09	單據別(1.出貨通知單 2.一般出貨單        3.無訂單出貨單 4.三角貿易出貨單        5.三角貿易出貨通知單        6.代採買出貨單        8.客戶驗收單        9.客戶驗退單        A.借貨出貨單
+          AND oga.oga65 = 'Y'	--oga65		客戶出貨簽收否
+          AND ogb.ogb12 - ogb.ogb50 - NVL(ogb.ogb51, 0) > 0	--ogb12 實際出貨數量, ogb50 累計簽收數量, ogb51 累計銷退數量
+        ORDER BY oga.oga02 DESC, ogb.ogb01, ogb.ogb03
+        """, nativeQuery = true)
+    List<Object[]> findUnsignedShipments();
+    
+    /**
+     * 查詢客戶排行列表
+     * 
+     * @return 客戶排行列表
+     */
+    @Query(value = """
+        SELECT 
+            occ.occ01 as compno,
+            occ.occ02 as name,
+            occ.occ031 as sname,
+            COALESCE(rank.priority, 999) as priority,
+            COALESCE(cnt.orderCount, 0) as orderCount
+        FROM occ_file occ
+        LEFT JOIN (
+            SELECT oea03, COUNT(*) as orderCount
+            FROM oea_file 
+            WHERE oea49 IN ('0', '1', 'S') AND oeaconf = 'Y'
+            GROUP BY oea03
+        ) cnt ON cnt.oea03 = occ.occ01
+        LEFT JOIN (
+            SELECT customer_code, priority
+            FROM customer_rank
+        ) rank ON rank.customer_code = occ.occ01
+        WHERE cnt.orderCount > 0
+        ORDER BY priority, orderCount DESC
+        """, nativeQuery = true)
+    List<Object[]> findCustomerRankList();
+
+}

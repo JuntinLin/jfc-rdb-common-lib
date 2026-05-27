@@ -15,7 +15,7 @@ public interface ComplaintMapper {
 	@Mapping(source = "ohc01", target = "complaintNo")
     @Mapping(source = "ohc02", target = "complaintDate")
 	//@Mapping(source = "ohc02", target = "complaintDate", qualifiedByName = "dateToString") 
-    @Mapping(source = "ohc03", target = "status")
+    @Mapping(source = "ohc03", target = "status") //ohc03	varchar2(1)	目前狀態	目前狀態'0':未處理'1':處理中'2':結案
     @Mapping(source = "ohc06", target = "customerCode")
     @Mapping(source = "ohc061", target = "customerName")
     @Mapping(source = "ohc08", target = "productCode")

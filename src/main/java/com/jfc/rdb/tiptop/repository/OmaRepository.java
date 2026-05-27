@@ -250,5 +250,5 @@ public interface OmaRepository extends JpaRepository<OmaFile, String> {
         " AND oma61 > 0 " + 					// 未結清 oma61	number(20,6)	本幣未沖金額
         "ORDER BY oma01 DESC"
     )
-    List<Object[]> findReceivablesDetailsByCustomer(@Param("customerCode") String customerCode);
+    List<Object[]> findReceivablesDetailsByCustomer(@Param("accountNumber") String customerCode);
 }

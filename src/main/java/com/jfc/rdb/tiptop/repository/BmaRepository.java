@@ -160,7 +160,6 @@ public interface BmaRepository extends JpaRepository<BmaFile, BmaFilePK> {
      * Find recently created/updated master items
      * Note: This assumes there's a timestamp field. Adjust based on actual schema.
      * 
-     * @param days Number of days to look back
      * @return List of recently modified master item codes
      */
     @Query("SELECT DISTINCT bma.id.bma01 FROM BmaFile bma " +

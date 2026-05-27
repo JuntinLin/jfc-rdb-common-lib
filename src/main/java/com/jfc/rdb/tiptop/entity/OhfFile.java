@@ -59,6 +59,76 @@ public class OhfFile implements Serializable {
     public ComplaintProcessType getProcessType() {
         return ComplaintProcessType.fromCode(this.id.getOhf02());
     }
+    
+// ========== 便利方法 (Convenience Methods) ==========
+    
+    /**
+     * 取得客訴單號
+     * 提供直接存取，避免每次都要透過 getId().getOhf01()
+     */
+    @Transient
+    public String getOhf01() {
+        return this.id != null ? this.id.getOhf01() : null;
+    }
+    
+    /**
+     * 取得類別
+     * 提供直接存取，避免每次都要透過 getId().getOhf02()
+     */
+    @Transient
+    public String getOhf02() {
+        return this.id != null ? this.id.getOhf02() : null;
+    }
+    
+    /**
+     * 設定客訴單號（便利方法）
+     * 注意：這會建立新的 PK 物件或更新現有的
+     */
+    public void setOhf01(String ohf01) {
+        if (this.id == null) {
+            this.id = new OhfFilePK();
+        }
+        this.id.setOhf01(ohf01);
+    }
+    
+    /**
+     * 設定類別（便利方法）
+     * 注意：這會建立新的 PK 物件或更新現有的
+     */
+    public void setOhf02(String ohf02) {
+        if (this.id == null) {
+            this.id = new OhfFilePK();
+        }
+        this.id.setOhf02(ohf02);
+    }
+    
+    /**
+     * 取得處理類別的中文描述
+     */
+    @Transient
+    public String getProcessTypeDescription() {
+        String ohf02 = getOhf02();
+        if (ohf02 == null) return "未知";
+        
+        return switch (ohf02) {
+            case "0" -> "客訴原因";
+            case "1" -> "調查結果";
+            case "2" -> "處理對策及改善對策";
+            case "3" -> "審核";
+            case "4" -> "核決";
+            case "5" -> "結案註記";
+            default -> "未知類別";
+        };
+    }
+    
+    /**
+     * 建立新實例的輔助方法
+     */
+    public static OhfFile create(String ohf01, String ohf02) {
+        OhfFile ohfFile = new OhfFile();
+        ohfFile.setId(new OhfFilePK(ohf01, ohf02));
+        return ohfFile;
+    }
 }
 
 

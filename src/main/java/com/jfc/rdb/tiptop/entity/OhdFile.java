@@ -11,7 +11,7 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
+//客訴單號單身檔(ohd_file)
 @Entity
 @Table(name = "OHD_FILE")
 @Data

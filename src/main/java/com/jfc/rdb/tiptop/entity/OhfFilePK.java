@@ -20,7 +20,7 @@ public class OhfFilePK implements Serializable {
     private String ohf01;    // 客訴單號
     
     @Column(name = "ohf02", length = 1)
-    private String ohf02;    // 類別
+    private String ohf02;    // 類別:0.客訴原因1.調查結果2.處理對策及改善對策3.審核4.核決5.結案註記
     
     @Override
     public boolean equals(Object o) {

@@ -10,4 +10,6 @@ public class AttendanceQueryDTO {
     private String employeeId;
     private String departmentId;
     private String corporationId;
+    //2025-12-10 前端無須傳入attendanceTypeId, 由後端自行決定
+    //private String attendanceTypeId; //907:單次未刷卡, 901:正常
 }
