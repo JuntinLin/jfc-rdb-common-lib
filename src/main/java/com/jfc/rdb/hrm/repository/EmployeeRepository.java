@@ -17,6 +17,12 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
 	List<Employee> findByDepartmentDepartmentId(UUID departmentId);
     List<Employee> findByFlagIsTrue();
     Optional<Employee> findByEmployeeCode(String employeeCode);
+
+    /**
+     * 查詢所有員工（含離職），用於考勤統計查詢離職員工歷史資料
+     */
+    @Query("SELECT e FROM Employee e ORDER BY e.employeeCode")
+    List<Employee> findAllEmployees();
     
     /**
      * Find employees who are active as of the reference date:
