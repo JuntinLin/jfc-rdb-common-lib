@@ -163,4 +163,29 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
            "AND (e.lastWorkDate > CURRENT_DATE OR e.lastWorkDate IS NULL) " +
            "ORDER BY e.employeeCode")
     List<Employee> findAllSalespeopleSimple();
+
+    /**
+     * 根據 EmployeeId 查詢員工（用於查找直屬主管）
+     */
+    @Query("SELECT e FROM Employee e WHERE e.employeeId = :employeeId")
+    Employee findByEmployeeId(@Param("employeeId") UUID employeeId);
+
+    /**
+     * 查詢指定部門中，職位名稱包含關鍵字的在職員工
+     * 用於查找課主管（課長）、部主管（經理）等
+     */
+    @Query(value = """
+        SELECT e.*
+        FROM Employee e
+        INNER JOIN Job j ON e.JobId = j.JobId
+        WHERE e.DepartmentId = :departmentId
+          AND j.Name LIKE CONCAT(N'%', :jobKeyword, N'%')
+          AND e.Flag = 1
+          AND e.Date <= GETDATE()
+          AND (e.LastWorkDate > GETDATE() OR e.LastWorkDate IS NULL)
+        ORDER BY j.IsVice ASC, e.Code ASC
+        """, nativeQuery = true)
+    List<Employee> findByDepartmentAndJobKeyword(
+            @Param("departmentId") UUID departmentId,
+            @Param("jobKeyword") String jobKeyword);
 }

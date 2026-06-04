@@ -32,5 +32,11 @@ public class Employee {
     private LocalDate hireDate; //Date	到職日期	DateTime
     private LocalDate lastWorkDate; //LastWorkDate	最後工作日	DateTime
 
+    @Column(name = "DirectorId")
+    private UUID directorId; //DirectorId	直接主管(Employee.EmployeeId)
+
+    @Column(name = "JobId")
+    private UUID jobId; //JobId	主要職位ID(Job.JobId)
+
     private Boolean flag; //Flag	是否有效	Boolean
 }
