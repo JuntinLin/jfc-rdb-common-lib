@@ -610,10 +610,12 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                 GREATEST(NVL(ecm.ecm301,0)+NVL(ecm.ecm302,0)+NVL(ecm.ecm303,0)
                     -NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0)-NVL(ecm.ecm313,0)
                     -NVL(ecm.ecm314,0)-NVL(ecm.ecm316,0), 0) AS wip_qty,
-                GREATEST(NVL(sfb.sfb08,0)-NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0), 0)
+                GREATEST(
+                    GREATEST(NVL(sfb.sfb08,0)-NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0), 0)
                     - GREATEST(NVL(ecm.ecm301,0)+NVL(ecm.ecm302,0)+NVL(ecm.ecm303,0)
                     -NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0)-NVL(ecm.ecm313,0)
-                    -NVL(ecm.ecm314,0)-NVL(ecm.ecm316,0), 0) AS plan_qty,
+                    -NVL(ecm.ecm314,0)-NVL(ecm.ecm316,0), 0)
+                , 0) AS plan_qty,
                 COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0), 0) AS unit_price,
                 ima.ima01, ima.ima571, ecm.ecm04,
                 CASE WHEN sfb.sfb22 IS NOT NULL OR p_sfb.sfb22 IS NOT NULL THEN 'ORDER'
@@ -663,10 +665,12 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                 GREATEST(NVL(ecm.ecm301,0)+NVL(ecm.ecm302,0)+NVL(ecm.ecm303,0)
                     -NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0)-NVL(ecm.ecm313,0)
                     -NVL(ecm.ecm314,0)-NVL(ecm.ecm316,0), 0) AS wip_qty,
-                GREATEST(NVL(sfb.sfb08,0)-NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0), 0)
+                GREATEST(
+                    GREATEST(NVL(sfb.sfb08,0)-NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0), 0)
                     - GREATEST(NVL(ecm.ecm301,0)+NVL(ecm.ecm302,0)+NVL(ecm.ecm303,0)
                     -NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0)-NVL(ecm.ecm313,0)
-                    -NVL(ecm.ecm314,0)-NVL(ecm.ecm316,0), 0) AS plan_qty,
+                    -NVL(ecm.ecm314,0)-NVL(ecm.ecm316,0), 0)
+                , 0) AS plan_qty,
                 COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0), 0) AS unit_price,
                 ROUND(GREATEST(NVL(ecm.ecm301,0)+NVL(ecm.ecm302,0)+NVL(ecm.ecm303,0)
                     -NVL(ecm.ecm311,0)-NVL(ecm.ecm312,0)-NVL(ecm.ecm313,0)
