@@ -188,4 +188,13 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     List<Employee> findByDepartmentAndJobKeyword(
             @Param("departmentId") UUID departmentId,
             @Param("jobKeyword") String jobKeyword);
+
+    /**
+     * 查詢某主管的所有直屬部屬（在職）
+     */
+    @Query("SELECT e FROM Employee e WHERE e.directorId = :directorId " +
+           "AND e.flag = true AND e.hireDate <= CURRENT_TIMESTAMP " +
+           "AND (e.lastWorkDate > CURRENT_TIMESTAMP OR e.lastWorkDate IS NULL) " +
+           "ORDER BY e.employeeCode")
+    List<Employee> findByDirectorId(@Param("directorId") UUID directorId);
 }
