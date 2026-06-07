@@ -38,5 +38,8 @@ public class Employee {
     @Column(name = "JobId")
     private UUID jobId; //JobId	主要職位ID(Job.JobId)
 
+    @Column(name = "LevelId")
+    private String levelId; //LevelId	職等代號	String
+
     private Boolean flag; //Flag	是否有效	Boolean
 }
