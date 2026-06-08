@@ -17,59 +17,6 @@ import com.jfc.rdb.tiptop.entity.OebFilePK;
 @Repository
 public interface O2CRepository extends JpaRepository<OebFile, OebFilePK> {
 	
-	// ========== 月度客戶統計查詢 (用於 runMonthlyStatistics) ==========
-	// (A) 訂單金額統計 (Order Amount)
-    @Query(value = """
-        SELECT
-            oea03 AS customerCode,
-            occ02 AS customerName,
-            TO_CHAR(oea02, 'YYYY-MM') AS statMonth,
-            SUM(oea24 * oeb14) AS totalAmount
-        FROM OEA_FILE
-        LEFT OUTER JOIN OEB_FILE ON OEB01 = OEA01
-        LEFT OUTER JOIN OCC_FILE ON OCC01 = OEA03
-        WHERE OEACONF IN ('Y', 'N') AND OEB04 IS NOT NULL
-          AND OEA02 BETWEEN :startDate AND :endDate
-        GROUP BY OEA03, OCC02, TO_CHAR(OEA02, 'YYYY-MM')
-        """, nativeQuery = true)
-    List<Object[]> findMonthlyOrderAmounts(@Param("startDate") Date startDate, @Param("endDate") Date endDate);
-
-    // (B) 出貨金額統計 (Shipment Amount)
-    @Query(value = """
-        SELECT
-            OGA03 AS customerCode,
-            OCC02 AS customerName,
-            TO_CHAR(OGA02, 'YYYY-MM') AS statMonth,
-            SUM(OGA24 * OGB14) AS totalAmount
-        FROM OGA_FILE
-        LEFT OUTER JOIN OGB_FILE ON OGB01 = OGA01
-        LEFT OUTER JOIN OCC_FILE ON OCC01 = OGA03
-        WHERE OGACONF = 'Y' AND OGAPOST = 'Y' AND OGA09 = '2'
-          AND OGA02 BETWEEN :startDate AND :endDate
-        GROUP BY OGA03, OCC02, TO_CHAR(OGA02, 'YYYY-MM')
-        """, nativeQuery = true)
-    List<Object[]> findMonthlyShipmentAmounts(
-    		@Param("startDate") Date startDate
-    		, @Param("endDate") Date endDate);
-
-    // (C) 發票金額統計 (Invoice/A/R Amount)
-    @Query(value = """
-        SELECT
-            OMA03 AS customerCode,
-            OCC02 AS customerName,
-            TO_CHAR(OMA02, 'YYYY-MM') AS statMonth,
-            SUM(OMB16) AS totalAmount
-        FROM OMB_FILE
-        LEFT OUTER JOIN OMA_FILE ON OMA01 = OMB01
-        LEFT OUTER JOIN OCC_FILE ON OCC01 = OMA03
-        WHERE OMACONF = 'Y' AND OMAVOID = 'N' AND OMA00 = '12'
-          AND OMA02 BETWEEN :startDate AND :endDate
-        GROUP BY OMA03, OCC02, TO_CHAR(OMA02, 'YYYY-MM')
-        """, nativeQuery = true)
-    List<Object[]> findMonthlyInvoiceAmounts(
-    		@Param("startDate") Date startDate
-    		, @Param("endDate") Date endDate);
-    
  // ========== 業務員客戶統計查詢 (用於 getSalesmanSummary) ==========
     /**
      * 查詢特定業務員在特定區間的訂單總額 (Order Amount)
