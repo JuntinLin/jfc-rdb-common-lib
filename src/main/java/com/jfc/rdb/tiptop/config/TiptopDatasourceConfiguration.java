@@ -12,6 +12,7 @@ import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import jakarta.persistence.EntityManagerFactory;
 
 @Configuration
+@Profile("!ext") // 外網精簡實例(ext)不得載入 Oracle/Tiptop ERP 資料源
 @EnableTransactionManagement
 @EnableJpaRepositories(
 		entityManagerFactoryRef = "tiptopEntityManagerFactory"
