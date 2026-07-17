@@ -24,4 +24,16 @@ public interface AppraisalFormRepository extends JpaRepository<AppraisalForm, UU
     Double findAverageScoreByEmpNoAndPeriodIds(@Param("empNo") String empNo, @Param("periodIds") List<UUID> periodIds);
 
     long countByPeriodId(UUID periodId);
+
+    // ===== ext 外網精簡實例用：以 PG 快照取代 HRM 查詢 =====
+
+    boolean existsByEmpNo(String empNo);
+
+    Optional<AppraisalForm> findFirstByEmpNoOrderByCreatedAtDesc(String empNo);
+
+    @Query("SELECT DISTINCT f.empNo FROM AppraisalForm f WHERE f.supervisorEmpNo = :supervisorEmpNo")
+    List<String> findEmpNosBySupervisor(@Param("supervisorEmpNo") String supervisorEmpNo);
+
+    @Query("SELECT DISTINCT f.deptCode FROM AppraisalForm f WHERE f.supervisorEmpNo = :supervisorEmpNo AND f.deptCode IS NOT NULL")
+    List<String> findDeptCodesBySupervisor(@Param("supervisorEmpNo") String supervisorEmpNo);
 }

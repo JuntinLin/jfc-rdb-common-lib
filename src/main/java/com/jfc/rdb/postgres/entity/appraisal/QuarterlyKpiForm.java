@@ -14,8 +14,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "appraisal_form")
-public class AppraisalForm {
+@Table(name = "quarterly_kpi_form",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"period_id", "emp_no"}))
+public class QuarterlyKpiForm {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -51,41 +52,65 @@ public class AppraisalForm {
     @Column(name = "approval_chain_json", columnDefinition = "TEXT")
     private String approvalChainJson;
 
-    @Column(name = "actual_hours")
-    private BigDecimal actualHours;
+    // 比重（從 dept_kpi_config 帶入，可覆寫）
+    @Column(name = "dept_kpi_weight")
+    private BigDecimal deptKpiWeight;
 
-    @Column(name = "required_hours")
-    private BigDecimal requiredHours;
+    @Column(name = "personal_kpi_weight")
+    private BigDecimal personalKpiWeight;
 
-    @Column(name = "overtime_hours")
-    private BigDecimal overtimeHours;
+    @Column(name = "supervisor_weight")
+    private BigDecimal supervisorWeight;
 
-    @Column(name = "annual_leave")
-    private BigDecimal annualLeave;
+    @Column(name = "proposal_weight")
+    private BigDecimal proposalWeight;
 
-    @Column(name = "sick_leave")
-    private BigDecimal sickLeave;
+    // 各構面原始分數（滿分 100）
+    @Column(name = "dept_kpi_score")
+    private BigDecimal deptKpiScore;
 
-    @Column(name = "personal_leave")
-    private BigDecimal personalLeave;
+    @Column(name = "personal_kpi_score")
+    private BigDecimal personalKpiScore;
 
-    @Column(name = "other_leave")
-    private BigDecimal otherLeave;
+    @Column(name = "supervisor_score")
+    private BigDecimal supervisorScore;
 
-    @Column(name = "late_count")
-    private Integer lateCount;
+    @Column(name = "proposal_score")
+    private BigDecimal proposalScore;
 
-    @Column(name = "reward_penalty", columnDefinition = "TEXT")
-    private String rewardPenalty;
+    // 各構面加權後分數
+    @Column(name = "dept_kpi_weighted")
+    private BigDecimal deptKpiWeighted;
 
+    @Column(name = "personal_kpi_weighted")
+    private BigDecimal personalKpiWeighted;
+
+    @Column(name = "supervisor_weighted")
+    private BigDecimal supervisorWeighted;
+
+    @Column(name = "proposal_weighted")
+    private BigDecimal proposalWeighted;
+
+    // 獎懲
+    @Column(name = "reward_penalty_adj")
+    private BigDecimal rewardPenaltyAdj;
+
+    @Column(name = "reward_penalty_desc", columnDefinition = "TEXT")
+    private String rewardPenaltyDesc;
+
+    // 總分 = 四構面加權 + 獎懲
     @Column(name = "total_score")
     private BigDecimal totalScore;
 
-    @Column(name = "deduction")
-    private BigDecimal deduction;
+    @Column(name = "grade", length = 5)
+    private String grade;
 
-    @Column(name = "final_score")
-    private BigDecimal finalScore;
+    // 參考資訊
+    @Column(name = "quality_issues")
+    private Integer qualityIssues;
+
+    @Column(name = "quality_loss")
+    private BigDecimal qualityLoss;
 
     @Column(name = "supervisor_comment", columnDefinition = "TEXT")
     private String supervisorComment;
@@ -100,8 +125,9 @@ public class AppraisalForm {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        if (lateCount == null) lateCount = 0;
-        if (deduction == null) deduction = BigDecimal.ZERO;
+        if (rewardPenaltyAdj == null) rewardPenaltyAdj = BigDecimal.ZERO;
+        if (qualityIssues == null) qualityIssues = 0;
+        if (qualityLoss == null) qualityLoss = BigDecimal.ZERO;
     }
 
     @PreUpdate
