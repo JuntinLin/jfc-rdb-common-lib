@@ -1,6 +1,7 @@
 package com.jfc.rdb.hrm.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import jakarta.annotation.PostConstruct;
 
@@ -10,6 +11,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
 
 @Configuration
+@Profile("!ext")   // 舊 HRM MSSQL TLSv1 hack：會毒害全 JVM 預設 SSLContext（Java 21 停用 TLSv1 → 所有 TLS 全滅），ext 不連 MSSQL 一律排除
 public class SecurityUtilities {
 
     @PostConstruct
