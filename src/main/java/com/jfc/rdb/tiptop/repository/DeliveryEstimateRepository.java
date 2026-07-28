@@ -267,4 +267,169 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         """, nativeQuery = true)
     List<Object[]> findCustomerRankList();
 
+    // ========== 月度管道統計專用查詢 ==========
+
+    /**
+     * 查詢全部未出貨訂單（不限交貨日期），供月度管道統計使用
+     * 欄位順序與 findUndeliveryOrders 相同
+     */
+    @Query(value = """
+        SELECT
+            oeb.oeb01,
+            oeb.oeb03,
+            oea.oea03,
+            oea.oea032,
+            imz.imz02 as productType,
+            ima.ima09 as spl,
+            ima.ima02,
+            ima.ima021,
+            oea.oea02,
+            oeb.oeb15,
+            oeb.oeb12,
+            oeb.oeb24,
+            oeb.oeb13,
+            COALESCE(stk.stockAmount, 0) as stockAmount,
+            oeb.oebud10,
+            oeb.oebud15,
+            sfb.sfb01,
+            gen.gen02 as creator,
+            oea.oea24,
+            COALESCE(sfb.sfb09, 0) as sfb09,
+            COALESCE(sfb.sfb08, 0) as sfb08,
+            pmo.tc_pmo01 AS mergeWorkOrderNo,
+            sfw.sfw01,
+            oeb.ta_oeb15 AS extendedDeliveryDate,
+            ogb.ogb12 as ogb12,
+            sales.gen02 as salesman,
+            occ.occ03 as custIndustry,
+            occ.occ21 as custCountry,
+            occ.occud06 as custUd06,
+            occ03 || '-' || oca02 as customerCategory,
+            occ21 || '-' || geb02 as countryName,
+            occ.occ04 as salesmanCode
+        FROM oeb_file oeb
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        LEFT JOIN occ_file occ on occ.occ01 = oea.oea03
+        LEFT JOIN oca_file oca on occ.occ03 = oca.oca01
+        LEFT JOIN geb_file geb on occ.occ21 = geb.geb01
+        LEFT JOIN gen_file sales on sales.gen01 = occ.occ04
+        LEFT JOIN ima_file ima ON ima.ima01 = oeb.oeb04
+        LEFT JOIN imz_file imz ON ima.ima06 = imz.imz01
+        LEFT JOIN gen_file gen ON gen.gen01 = oea.oeaoriu
+        LEFT JOIN sfb_file sfb ON sfb.sfb22 = oeb.oeb01 AND sfb.sfb221 = oeb.oeb03 AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
+        LEFT JOIN tc_pmo_file pmo ON (oeb.oeb01 || '-' || oeb.oeb03) = pmo.tc_pmo05 AND pmo.tc_pmo01 LIKE 'T51%' and pmo.tc_pmo02 = 0
+        LEFT JOIN (
+            SELECT MIN(sfw01) as sfw01, sfw03
+            FROM sfw_file
+            GROUP BY sfw03
+        ) sfw ON sfw.sfw03 LIKE '%' || oeb.oeb01 || '%'
+        LEFT JOIN (
+            SELECT img01, SUM(img10) as stockAmount
+            FROM img_file
+            WHERE img23 = 'Y' AND img10 > 0
+            GROUP BY img01
+        ) stk ON stk.img01 = oeb.oeb04
+        LEFT JOIN (
+            select ogb31, ogb32, sum(ogb12) as ogb12
+            from ogb_file
+            left outer join oga_file on oga01 = ogb01
+            WHERE ogaconf = 'Y' AND oga09 = '2'
+            group by ogb31, ogb32
+        )ogb on ogb.ogb31 = oeb.oeb01 and ogb.ogb32 = oeb.oeb03
+        WHERE oeb.oeb12 - oeb.oeb24 > 0
+          AND oea.oea49 IN ('0', '1', 'S')
+          AND oea.oeaconf = 'Y'
+          AND (oeb.oeb70 IS NULL OR oeb.oeb70 != 'Y')
+        ORDER BY COALESCE(oeb.ta_oeb15, oeb.oeb15), oeb.oeb01, oeb.oeb03
+        """, nativeQuery = true)
+    List<Object[]> findAllUndeliveryOrders();
+
+    /**
+     * 空油壓缸入庫金額（按入庫月份彙總）
+     * ima06 IN ('130','140') 油壓缸+空壓缸
+     * row[0] yearMonth (YYYY-MM), row[1] amount
+     */
+    @Query(value = """
+        SELECT
+            TO_CHAR(TRUNC(sfu.sfu02, 'MM'), 'YYYY-MM') AS yearMonth,
+            NVL(SUM(sfv.sfv09 * NVL(oea.oea24, 1) * NVL(oeb.oeb13, 0)), 0) AS amount
+        FROM sfv_file sfv
+        INNER JOIN sfu_file sfu ON sfu.sfu01 = sfv.sfv01
+        INNER JOIN sfb_file sfb ON sfb.sfb01 = sfv.sfv07
+        INNER JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        INNER JOIN ima_file ima ON ima.ima01 = sfv.sfv03
+        WHERE sfu.sfuconf = 'Y' AND sfu.sfupost = 'Y'
+          AND ima.ima06 IN ('130', '140')
+          AND sfb.sfb22 IS NOT NULL
+          AND sfu.sfu02 BETWEEN :startDate AND :endDate
+        GROUP BY TRUNC(sfu.sfu02, 'MM')
+        ORDER BY TRUNC(sfu.sfu02, 'MM')
+        """, nativeQuery = true)
+    List<Object[]> findCylinderInStockByMonth(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 出貨金額（按出貨月份彙總）
+     * row[0] yearMonth (YYYY-MM), row[1] amount
+     */
+    @Query(value = """
+        SELECT
+            TO_CHAR(TRUNC(oga.oga02, 'MM'), 'YYYY-MM') AS yearMonth,
+            NVL(SUM(oga.oga24 * ogb.ogb14), 0) AS amount
+        FROM oga_file oga
+        LEFT OUTER JOIN ogb_file ogb ON ogb.ogb01 = oga.oga01
+        WHERE oga.ogaconf = 'Y' AND oga.ogapost = 'Y' AND oga.oga09 = '2'
+          AND oga.oga02 BETWEEN :startDate AND :endDate
+        GROUP BY TRUNC(oga.oga02, 'MM')
+        ORDER BY TRUNC(oga.oga02, 'MM')
+        """, nativeQuery = true)
+    List<Object[]> findShipmentAmountByMonth(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 已出貨未簽收金額（按出貨月份彙總）
+     * (ogb12 - ogb50 - ogb51) * ogb13 * oga24
+     * row[0] yearMonth (YYYY-MM), row[1] amount
+     */
+    @Query(value = """
+        SELECT
+            TO_CHAR(TRUNC(oga.oga02, 'MM'), 'YYYY-MM') AS yearMonth,
+            NVL(SUM((ogb.ogb12 - ogb.ogb50 - NVL(ogb.ogb51, 0)) * ogb.ogb13 * oga.oga24), 0) AS amount
+        FROM ogb_file ogb
+        INNER JOIN oga_file oga ON oga.oga01 = ogb.ogb01
+        WHERE oga.ogaconf = 'Y'
+          AND oga.oga09 = '2'
+          AND oga.oga65 = 'Y'
+          AND ogb.ogb12 - ogb.ogb50 - NVL(ogb.ogb51, 0) > 0
+          AND oga.oga02 BETWEEN :startDate AND :endDate
+        GROUP BY TRUNC(oga.oga02, 'MM')
+        ORDER BY TRUNC(oga.oga02, 'MM')
+        """, nativeQuery = true)
+    List<Object[]> findUnsignedShipmentAmountByMonth(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 銷貨收入（應收帳款/開票）金額（按開票月份彙總）
+     * SUM(OMB16) 本幣金額
+     * row[0] yearMonth (YYYY-MM), row[1] amount
+     */
+    @Query(value = """
+        SELECT
+            TO_CHAR(TRUNC(oma.oma02, 'MM'), 'YYYY-MM') AS yearMonth,
+            NVL(SUM(omb.omb16), 0) AS amount
+        FROM omb_file omb
+        LEFT OUTER JOIN oma_file oma ON oma.oma01 = omb.omb01
+        WHERE oma.omaconf = 'Y' AND oma.omavoid = 'N' AND oma.oma00 = '12'
+          AND oma.oma02 BETWEEN :startDate AND :endDate
+        GROUP BY TRUNC(oma.oma02, 'MM')
+        ORDER BY TRUNC(oma.oma02, 'MM')
+        """, nativeQuery = true)
+    List<Object[]> findInvoiceAmountByMonth(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
 }
