@@ -355,7 +355,7 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             NVL(SUM(sfv.sfv09 * NVL(oea.oea24, 1) * NVL(oeb.oeb13, 0)), 0) AS amount
         FROM sfv_file sfv
         INNER JOIN sfu_file sfu ON sfu.sfu01 = sfv.sfv01
-        INNER JOIN sfb_file sfb ON sfb.sfb01 = sfv.sfv07
+        INNER JOIN sfb_file sfb ON sfb.sfb01 = sfv.sfv11
         INNER JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
         INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
         INNER JOIN ima_file ima ON ima.ima01 = sfv.sfv03
