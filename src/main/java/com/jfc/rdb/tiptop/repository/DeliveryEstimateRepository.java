@@ -358,7 +358,7 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         INNER JOIN sfb_file sfb ON sfb.sfb01 = sfv.sfv11
         INNER JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
         INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
-        INNER JOIN ima_file ima ON ima.ima01 = sfv.sfv03
+        INNER JOIN ima_file ima ON ima.ima01 = sfv.sfv04
         WHERE sfu.sfuconf = 'Y' AND sfu.sfupost = 'Y'
           AND ima.ima06 IN ('130', '140')
           AND sfb.sfb22 IS NOT NULL
