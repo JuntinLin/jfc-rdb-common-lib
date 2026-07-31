@@ -108,4 +108,10 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
      * @return 該層級的部門列表
      */
     List<Department> findByDeptLevelAndFlagIsTrueOrderByOrderNumber(Integer deptLevel);
+
+    /**
+     * 查詢指定員工是否為任何部門負責人（Department.Principal = employeeId）
+     */
+    @Query(value = "SELECT COUNT(*) FROM Department WHERE Principal = :employeeId", nativeQuery = true)
+    int countByPrincipal(@Param("employeeId") java.util.UUID employeeId);
 }
