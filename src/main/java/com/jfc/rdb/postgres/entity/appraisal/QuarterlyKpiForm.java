@@ -105,6 +105,9 @@ public class QuarterlyKpiForm {
     @Column(name = "grade", length = 5)
     private String grade;
 
+    @Column(name = "grade_override", length = 5)
+    private String gradeOverride;
+
     // 參考資訊
     @Column(name = "quality_issues")
     private Integer qualityIssues;
