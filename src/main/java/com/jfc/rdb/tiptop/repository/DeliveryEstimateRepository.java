@@ -309,7 +309,8 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             occ.occud06 as custUd06,
             occ03 || '-' || oca02 as customerCategory,
             occ21 || '-' || geb02 as countryName,
-            occ.occ04 as salesmanCode
+            occ.occ04 as salesmanCode,
+            COALESCE(oeb.ta_oeb15, oeb.oeb15) AS effectiveDelivery
         FROM oeb_file oeb
         INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
         LEFT JOIN occ_file occ on occ.occ01 = oea.oea03
