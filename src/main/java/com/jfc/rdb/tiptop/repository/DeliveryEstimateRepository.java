@@ -231,13 +231,16 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         INNER JOIN oga_file oga ON oga.oga01 = ogb.ogb01
         LEFT JOIN ima_file ima ON ima.ima01 = ogb.ogb04
         LEFT JOIN imz_file imz ON ima.ima06 = imz.imz01
-        WHERE oga.ogaconf = 'Y' --ogaconf	確認否/作廢碼 (Y/N/X) 欄位值:   N.未確認   X.作廢   Y.已確認 
-          AND oga.oga09 = '2'	--oga09	單據別(1.出貨通知單 2.一般出貨單        3.無訂單出貨單 4.三角貿易出貨單        5.三角貿易出貨通知單        6.代採買出貨單        8.客戶驗收單        9.客戶驗退單        A.借貨出貨單
-          AND oga.oga65 = 'Y'	--oga65		客戶出貨簽收否
-          AND ogb.ogb12 - ogb.ogb50 - NVL(ogb.ogb51, 0) > 0	--ogb12 實際出貨數量, ogb50 累計簽收數量, ogb51 累計銷退數量
+        WHERE oga.ogaconf = 'Y'
+          AND oga.oga09 = '2'
+          AND oga.oga65 = 'Y'
+          AND ogb.ogb12 - ogb.ogb50 - NVL(ogb.ogb51, 0) > 0
+          AND oga.oga02 BETWEEN :startDate AND :endDate
         ORDER BY oga.oga02 DESC, ogb.ogb01, ogb.ogb03
         """, nativeQuery = true)
-    List<Object[]> findUnsignedShipments();
+    List<Object[]> findUnsignedShipments(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
     
     /**
      * 查詢客戶排行列表
