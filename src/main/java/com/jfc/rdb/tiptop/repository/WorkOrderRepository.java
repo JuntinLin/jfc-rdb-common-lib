@@ -656,7 +656,8 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      * row[8] unit_price, row[9] wip_value, row[10] plan_value,
      * row[11] sfb04(狀態), row[12] ecm45(作業名稱),
      * row[13] oeb01(訂單號), row[14] ecm04(作業編號), row[15] ima571,
-     * row[16] delivery_date, row[17] ecm67(委外廠商), row[18] source_type
+     * row[16] delivery_date, row[17] ecm67(委外廠商), row[18] source_type,
+     * row[19] oea032(客戶簡稱)
      */
     @Query(value = """
             SELECT ecm.ecm01, ecm.ecm03, ecm.ecm06,
@@ -690,7 +691,8 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                 ecm.ecm67,
                 CASE WHEN sfb.sfb22 IS NOT NULL OR p_sfb.sfb22 IS NOT NULL THEN 'ORDER'
                      WHEN sfb.sfb91 IS NOT NULL OR p_sfb.sfb91 IS NOT NULL THEN 'KSG'
-                     ELSE 'WO' END AS source_type
+                     ELSE 'WO' END AS source_type,
+                oea.oea032 AS customer_name
             FROM ecm_file ecm
             JOIN sfb_file sfb ON sfb.sfb01 = ecm.ecm01 AND sfb.sfbacti = 'Y'
                 AND TRIM(TO_CHAR(sfb.sfb04)) IN ('1','2','3','4','5','6')
@@ -708,6 +710,7 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
             LEFT JOIN sfb_file p_sfb ON p_sfb.sfb01 = sfb.sfb86
             LEFT JOIN oeb_file p_oeb ON p_oeb.oeb01 = p_sfb.sfb22 AND p_oeb.oeb03 = p_sfb.sfb221
             LEFT JOIN ksg_file p_ksg ON p_ksg.ksg01 = p_sfb.sfb91 AND p_ksg.ksg02 = p_sfb.sfb92
+            LEFT JOIN oea_file oea ON TRIM(oea.oea01) = TRIM(COALESCE(sfb.sfb22, p_sfb.sfb22))
             WHERE ecm.ecmacti = 'Y'
                 AND NVL(sfb.sfb08,0) - NVL(ecm.ecm311,0) - NVL(ecm.ecm312,0) > 0
                 AND (

@@ -51,6 +51,15 @@ public class KpiDefinition {
     @Column(name = "weight", nullable = false)
     private BigDecimal weight;
 
+    @Column(name = "target_value", length = 50)
+    private String targetValue;
+
+    @Column(name = "target_desc", length = 100)
+    private String targetDesc;
+
+    @Column(name = "last_year_value", length = 50)
+    private String lastYearValue;
+
     @Column(name = "sort_order")
     private Integer sortOrder;
 

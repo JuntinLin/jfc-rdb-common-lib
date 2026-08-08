@@ -45,6 +45,9 @@ public class AppraisalPeriod {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    @Column(name = "target_dept_level")
+    private Integer targetDeptLevel;  // 核決層級: 2=總經理, 3=部主管, 4=課主管（預設3）
+
     @Column(name = "status", nullable = false, length = 20)
     private String status;
 
