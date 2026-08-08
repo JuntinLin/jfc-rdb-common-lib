@@ -86,11 +86,11 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         LEFT JOIN gen_file gen ON gen.gen01 = oea.oeaoriu
         LEFT JOIN sfb_file sfb ON sfb.sfb22 = oeb.oeb01 AND sfb.sfb221 = oeb.oeb03 AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
         LEFT JOIN tc_pmo_file pmo ON (oeb.oeb01 || '-' || oeb.oeb03) = pmo.tc_pmo05 AND pmo.tc_pmo01 LIKE 'T51%' and pmo.tc_pmo02 = 0
-        LEFT JOIN LATERAL (
+        OUTER APPLY (
     		SELECT MIN(sfw.sfw01) as sfw01
     		FROM sfw_file sfw
     		WHERE sfw.sfw03 LIKE '%' || oeb.oeb01 || '%'
-    	) sfw ON 1=1
+    	) sfw
         LEFT JOIN (
             SELECT img01, SUM(img10) as stockAmount
             FROM img_file
@@ -172,11 +172,11 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         LEFT JOIN gen_file gen ON gen.gen01 = oea.oeaoriu
         LEFT JOIN sfb_file sfb ON sfb.sfb22 = oeb.oeb01 AND sfb.sfb221 = oeb.oeb03 AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
         LEFT JOIN tc_pmo_file pmo ON (oeb.oeb01 || '-' || oeb.oeb03) = pmo.tc_pmo05 AND pmo.tc_pmo01 LIKE 'T51%' AND pmo.tc_pmo02 = 0
-        LEFT JOIN LATERAL (
+        OUTER APPLY (
             SELECT MIN(sfw.sfw01) as sfw01
             FROM sfw_file sfw
             WHERE sfw.sfw03 LIKE '%' || oeb.oeb01 || '%'
-        ) sfw ON 1=1
+        ) sfw
         LEFT JOIN (
             SELECT img01, SUM(img10) as stockAmount
             FROM img_file
@@ -322,11 +322,11 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         LEFT JOIN gen_file gen ON gen.gen01 = oea.oeaoriu
         LEFT JOIN sfb_file sfb ON sfb.sfb22 = oeb.oeb01 AND sfb.sfb221 = oeb.oeb03 AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
         LEFT JOIN tc_pmo_file pmo ON (oeb.oeb01 || '-' || oeb.oeb03) = pmo.tc_pmo05 AND pmo.tc_pmo01 LIKE 'T51%' and pmo.tc_pmo02 = 0
-        LEFT JOIN LATERAL (
+        OUTER APPLY (
             SELECT MIN(sfw.sfw01) as sfw01
             FROM sfw_file sfw
             WHERE sfw.sfw03 LIKE '%' || oeb.oeb01 || '%'
-        ) sfw ON 1=1
+        ) sfw
         LEFT JOIN (
             SELECT img01, SUM(img10) as stockAmount
             FROM img_file
