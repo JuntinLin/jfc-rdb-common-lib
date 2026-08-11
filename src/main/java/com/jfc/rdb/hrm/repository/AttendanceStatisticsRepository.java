@@ -137,6 +137,66 @@ public interface AttendanceStatisticsRepository extends JpaRepository<Employee, 
 			            AND o.StateId = 'PlanState_003'
 			            AND o.Date BETWEEN :startDate AND :endDate
 			        GROUP BY o.EmployeeId, o.Date, o.AttendanceTypeId
+
+			        UNION ALL
+
+			        SELECT '加班-假日' AS col1, o.EmployeeId, o.Date, '分段一' AS name, SUM(o.HolidayOTOne) AS value, o.AttendanceTypeId
+			        FROM AttendanceOTResult o
+			        WHERE o.HolidayOTOne > 0
+			            AND o.ApproveResultId = 'OperatorResult_001'
+			            AND o.StateId = 'PlanState_003'
+			            AND o.Date BETWEEN :startDate AND :endDate
+			        GROUP BY o.EmployeeId, o.Date, o.AttendanceTypeId
+
+			        UNION ALL
+
+			        SELECT '加班-假日' AS col1, o.EmployeeId, o.Date, '分段二' AS name, SUM(o.HolidayOTSec) AS value, o.AttendanceTypeId
+			        FROM AttendanceOTResult o
+			        WHERE o.HolidayOTSec > 0
+			            AND o.ApproveResultId = 'OperatorResult_001'
+			            AND o.StateId = 'PlanState_003'
+			            AND o.Date BETWEEN :startDate AND :endDate
+			        GROUP BY o.EmployeeId, o.Date, o.AttendanceTypeId
+
+			        UNION ALL
+
+			        SELECT '加班-假日' AS col1, o.EmployeeId, o.Date, '分段三' AS name, SUM(o.HolidayOTThree) AS value, o.AttendanceTypeId
+			        FROM AttendanceOTResult o
+			        WHERE o.HolidayOTThree > 0
+			            AND o.ApproveResultId = 'OperatorResult_001'
+			            AND o.StateId = 'PlanState_003'
+			            AND o.Date BETWEEN :startDate AND :endDate
+			        GROUP BY o.EmployeeId, o.Date, o.AttendanceTypeId
+
+			        UNION ALL
+
+			        SELECT '加班-節日' AS col1, o.EmployeeId, o.Date, '分段一' AS name, SUM(o.FestivalOTOne) AS value, o.AttendanceTypeId
+			        FROM AttendanceOTResult o
+			        WHERE o.FestivalOTOne > 0
+			            AND o.ApproveResultId = 'OperatorResult_001'
+			            AND o.StateId = 'PlanState_003'
+			            AND o.Date BETWEEN :startDate AND :endDate
+			        GROUP BY o.EmployeeId, o.Date, o.AttendanceTypeId
+
+			        UNION ALL
+
+			        SELECT '加班-節日' AS col1, o.EmployeeId, o.Date, '分段二' AS name, SUM(o.FestivalOTSec) AS value, o.AttendanceTypeId
+			        FROM AttendanceOTResult o
+			        WHERE o.FestivalOTSec > 0
+			            AND o.ApproveResultId = 'OperatorResult_001'
+			            AND o.StateId = 'PlanState_003'
+			            AND o.Date BETWEEN :startDate AND :endDate
+			        GROUP BY o.EmployeeId, o.Date, o.AttendanceTypeId
+
+			        UNION ALL
+
+			        SELECT '加班-節日' AS col1, o.EmployeeId, o.Date, '分段三' AS name, SUM(o.FestivalOTThree) AS value, o.AttendanceTypeId
+			        FROM AttendanceOTResult o
+			        WHERE o.FestivalOTThree > 0
+			            AND o.ApproveResultId = 'OperatorResult_001'
+			            AND o.StateId = 'PlanState_003'
+			            AND o.Date BETWEEN :startDate AND :endDate
+			        GROUP BY o.EmployeeId, o.Date, o.AttendanceTypeId
 			    ),
 			    LeaveStats AS (
 			        SELECT
