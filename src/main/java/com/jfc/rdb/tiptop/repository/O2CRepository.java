@@ -145,6 +145,63 @@ public interface O2CRepository extends JpaRepository<OebFile, OebFilePK> {
             @Param("startDate") Date startDate,
             @Param("endDate") Date endDate);
 
+    // ========== 產業別統計（不分客戶，用於 getPeriodStatsByIndustry） ==========
+
+    /**
+     * 訂單金額 - 按產業別分組
+     * row: industry, totalAmount
+     */
+    @Query(value = """
+        SELECT oca.oca02 AS industry, NVL(SUM(oea.oea24 * oeb.oeb14), 0) AS totalAmount
+        FROM OEA_FILE oea
+        LEFT OUTER JOIN OEB_FILE oeb ON oeb.oeb01 = oea.oea01
+        LEFT JOIN OCC_FILE occ ON occ.occ01 = oea.oea03
+        LEFT JOIN OCA_FILE oca ON oca.oca01 = occ.occ03
+        WHERE oea.oeaconf IN ('Y', 'N')
+          AND oeb.oeb04 IS NOT NULL
+          AND oea.oea02 BETWEEN :startDate AND :endDate
+        GROUP BY oca.oca02
+        """, nativeQuery = true)
+    List<Object[]> findOrderAmountsByIndustry(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 出貨金額 - 按產業別分組
+     * row: industry, totalAmount
+     */
+    @Query(value = """
+        SELECT oca.oca02 AS industry, NVL(SUM(oga.oga24 * ogb.ogb14), 0) AS totalAmount
+        FROM OGA_FILE oga
+        LEFT OUTER JOIN OGB_FILE ogb ON ogb.ogb01 = oga.oga01
+        LEFT JOIN OCC_FILE occ ON occ.occ01 = oga.oga03
+        LEFT JOIN OCA_FILE oca ON oca.oca01 = occ.occ03
+        WHERE oga.ogaconf = 'Y' AND oga.ogapost = 'Y' AND oga.oga09 = '2'
+          AND oga.oga02 BETWEEN :startDate AND :endDate
+        GROUP BY oca.oca02
+        """, nativeQuery = true)
+    List<Object[]> findShipmentAmountsByIndustry(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 應收金額 - 按產業別分組
+     * row: industry, totalAmount
+     */
+    @Query(value = """
+        SELECT oca.oca02 AS industry, NVL(SUM(omb.omb16), 0) AS totalAmount
+        FROM OMB_FILE omb
+        LEFT OUTER JOIN OMA_FILE oma ON oma.oma01 = omb.omb01
+        LEFT JOIN OCC_FILE occ ON occ.occ01 = oma.oma03
+        LEFT JOIN OCA_FILE oca ON oca.oca01 = occ.occ03
+        WHERE oma.omaconf = 'Y' AND oma.omavoid = 'N' AND oma.oma00 = '12'
+          AND oma.oma02 BETWEEN :startDate AND :endDate
+        GROUP BY oca.oca02
+        """, nativeQuery = true)
+    List<Object[]> findInvoiceAmountsByIndustry(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
     // ========== 客戶訂單/出貨分類統計 ==========
 
     /**
