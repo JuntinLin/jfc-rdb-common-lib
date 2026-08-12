@@ -202,6 +202,48 @@ public interface O2CRepository extends JpaRepository<OebFile, OebFilePK> {
             @Param("startDate") Date startDate,
             @Param("endDate") Date endDate);
 
+    // ========== 產品別統計（不分客戶，用於 getPeriodStatsByProductType） ==========
+    // 產品別 = IMZ_FILE.IMZ02 原始值（同「出貨預估」頁 ProductTypeFilter 的「類別」定義：
+    // 油缸/氣缸/系統整合/系統整合-零件/電動缸/機械手整合/油封組/零件組/半成品/市販品/密封件類/雜項/其他）
+    // 應收(OMB_FILE)無料號關聯，故無產品別統計，僅訂單/出貨
+
+    /**
+     * 訂單金額 - 按產品別分組
+     * row: productType, totalAmount
+     */
+    @Query(value = """
+        SELECT NVL(imz.imz02, '未分類') AS productType, NVL(SUM(oea.oea24 * oeb.oeb14), 0) AS totalAmount
+        FROM OEA_FILE oea
+        LEFT OUTER JOIN OEB_FILE oeb ON oeb.oeb01 = oea.oea01
+        LEFT JOIN IMA_FILE ima ON ima.ima01 = oeb.oeb04
+        LEFT JOIN IMZ_FILE imz ON imz.imz01 = ima.ima06
+        WHERE oea.oeaconf IN ('Y', 'N')
+          AND oeb.oeb04 IS NOT NULL
+          AND oea.oea02 BETWEEN :startDate AND :endDate
+        GROUP BY imz.imz02
+        """, nativeQuery = true)
+    List<Object[]> findOrderAmountsByProductType(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 出貨金額 - 按產品別分組
+     * row: productType, totalAmount
+     */
+    @Query(value = """
+        SELECT NVL(imz.imz02, '未分類') AS productType, NVL(SUM(oga.oga24 * ogb.ogb14), 0) AS totalAmount
+        FROM OGA_FILE oga
+        LEFT OUTER JOIN OGB_FILE ogb ON ogb.ogb01 = oga.oga01
+        LEFT JOIN IMA_FILE ima ON ima.ima01 = ogb.ogb04
+        LEFT JOIN IMZ_FILE imz ON imz.imz01 = ima.ima06
+        WHERE oga.ogaconf = 'Y' AND oga.ogapost = 'Y' AND oga.oga09 = '2'
+          AND oga.oga02 BETWEEN :startDate AND :endDate
+        GROUP BY imz.imz02
+        """, nativeQuery = true)
+    List<Object[]> findShipmentAmountsByProductType(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
     // ========== 客戶訂單/出貨分類統計 ==========
 
     /**
