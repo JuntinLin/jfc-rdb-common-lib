@@ -205,7 +205,6 @@ public interface O2CRepository extends JpaRepository<OebFile, OebFilePK> {
     // ========== 產品別統計（不分客戶，用於 getPeriodStatsByProductType） ==========
     // 產品別 = IMZ_FILE.IMZ02 原始值（同「出貨預估」頁 ProductTypeFilter 的「類別」定義：
     // 油缸/氣缸/系統整合/系統整合-零件/電動缸/機械手整合/油封組/零件組/半成品/市販品/密封件類/雜項/其他）
-    // 應收(OMB_FILE)無料號關聯，故無產品別統計，僅訂單/出貨
 
     /**
      * 訂單金額 - 按產品別分組
@@ -241,6 +240,24 @@ public interface O2CRepository extends JpaRepository<OebFile, OebFilePK> {
         GROUP BY imz.imz02
         """, nativeQuery = true)
     List<Object[]> findShipmentAmountsByProductType(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 應收金額 - 按產品別分組（OMB_FILE.OMB04 品名編號 -> IMA_FILE.IMA01，同訂單出貨應收統計_客戶.sql 參考寫法）
+     * row: productType, totalAmount
+     */
+    @Query(value = """
+        SELECT NVL(imz.imz02, '未分類') AS productType, NVL(SUM(omb.omb16), 0) AS totalAmount
+        FROM OMB_FILE omb
+        LEFT OUTER JOIN OMA_FILE oma ON oma.oma01 = omb.omb01
+        LEFT JOIN IMA_FILE ima ON ima.ima01 = omb.omb04
+        LEFT JOIN IMZ_FILE imz ON imz.imz01 = ima.ima06
+        WHERE oma.omaconf = 'Y' AND oma.omavoid = 'N' AND oma.oma00 = '12'
+          AND oma.oma02 BETWEEN :startDate AND :endDate
+        GROUP BY imz.imz02
+        """, nativeQuery = true)
+    List<Object[]> findInvoiceAmountsByProductType(
             @Param("startDate") Date startDate,
             @Param("endDate") Date endDate);
 
