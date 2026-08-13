@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -45,6 +48,7 @@ public class KpiDefinition {
     @Column(name = "data_source", nullable = false, length = 30)
     private String dataSource;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "source_config", columnDefinition = "JSONB")
     private String sourceConfig;
 
