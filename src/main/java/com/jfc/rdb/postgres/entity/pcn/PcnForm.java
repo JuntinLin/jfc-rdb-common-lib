@@ -8,6 +8,8 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Data
 @NoArgsConstructor
@@ -50,6 +52,7 @@ public class PcnForm {
 
     /** JSON: {productDesign,drawingRevision,specChange,materialChange,bomChange,customerRequest,
      *         processChange,equipmentChange,fixtureChange,processConditionChange,weldingConditionChange,other,otherText} */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "change_type_flags", columnDefinition = "JSONB")
     private String changeTypeFlags;
 
@@ -61,6 +64,7 @@ public class PcnForm {
 
     /** JSON: {customerRequest,qualityImprovement,costReduction,capacityImprovement,
      *         processImprovement,complaintImprovement,other,otherText} */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "change_reason_flags", columnDefinition = "JSONB")
     private String changeReasonFlags;
 
@@ -89,6 +93,7 @@ public class PcnForm {
     private String effectiveBatchWo;
 
     /** JSON: {drawing,bom,sop,other,otherText} */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "doc_update_flags", columnDefinition = "JSONB")
     private String docUpdateFlags;
 
