@@ -17,4 +17,7 @@ public interface SupplierEvaluationRosterRepository extends JpaRepository<Suppli
             UUID periodId, String vendorCategory);
 
     SupplierEvaluationRoster findByPeriodIdAndVendorCode(UUID periodId, String vendorCode);
+
+    /** 同一廠商同期間可能同時有 SUB(加工/委外) 與 REG(原料) 交易，須分開查找/更新，不能只用 vendorCode */
+    SupplierEvaluationRoster findByPeriodIdAndVendorCodeAndVendorCategory(UUID periodId, String vendorCode, String vendorCategory);
 }
