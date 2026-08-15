@@ -664,6 +664,63 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
     List<Object[]> findAllResourceGroups();
 
     /**
+     * 排程甘特圖資料（APS Phase 1.2，現有 WIP 視覺化，非排程引擎輸出）
+     * row[0] groupCode, row[1] groupType('DEPT'/'OUTSOURCE'), row[2] workOrderNo,
+     * row[3] partNumber, row[4] partName, row[5] routingSeq, row[6] routingDesc,
+     * row[7] startDate（第一站取sfb25實際開工日，後續站取前一站shb_file轉出時間）,
+     * row[8] endDateProxy（交貨日代理值，COALESCE訂單/製造通知單交期，非真正工序完工日）,
+     * row[9] wipQty, row[10] productionQty, row[11] workOrderStatus
+     */
+    @Query(value = """
+            SELECT
+                CASE WHEN NVL(ecm.ecm52, 'N') = 'Y' THEN TO_CHAR(ecm.ecm67) ELSE TO_CHAR(ecm.ecm06) END AS group_code,
+                CASE WHEN NVL(ecm.ecm52, 'N') = 'Y' THEN 'OUTSOURCE' ELSE 'DEPT' END AS group_type,
+                sfb.sfb01 AS work_order_no,
+                sfb.sfb05 AS part_number,
+                ima.ima02 AS part_name,
+                TO_CHAR(ecm.ecm03) AS routing_seq,
+                ecd.ecd02 AS routing_desc,
+                CASE
+                    WHEN ecm.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = sfb.sfb01 AND ecmacti = 'Y')
+                    THEN sfb.sfb25
+                    ELSE (
+                        SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI'))
+                        FROM shb_file
+                        WHERE shb05 = sfb.sfb01
+                          AND shb06 < ecm.ecm03
+                          AND shb111 > 0
+                          AND shbacti = 'Y'
+                    )
+                END AS start_date,
+                COALESCE(oeb.ta_oeb15, oeb.oeb15, ksg.ksg04,
+                    p_oeb.ta_oeb15, p_oeb.oeb15, p_ksg.ksg04,
+                    sfb.sfb15) AS end_date_proxy,
+                (NVL(ecm.ecm301,0) + NVL(ecm.ecm302,0) + NVL(ecm.ecm303,0)
+                 - NVL(ecm.ecm311,0) - NVL(ecm.ecm312,0) - NVL(ecm.ecm313,0)
+                 - NVL(ecm.ecm314,0) - NVL(ecm.ecm316,0)) AS wip_qty,
+                sfb.sfb08 AS production_qty,
+                sfb.sfb04 AS work_order_status
+            FROM ecm_file ecm
+            JOIN sfb_file sfb ON sfb.sfb01 = ecm.ecm01 AND sfb.sfbacti = 'Y'
+            LEFT JOIN eca_file eca ON eca.eca01 = ecm.ecm06
+            LEFT JOIN ima_file ima ON ima.ima01 = sfb.sfb05
+            LEFT JOIN ecd_file ecd ON ecd.ecd01 = ecm.ecm04
+            LEFT JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
+            LEFT JOIN ksg_file ksg ON ksg.ksg01 = sfb.sfb91 AND ksg.ksg02 = sfb.sfb92
+            LEFT JOIN sfb_file p_sfb ON p_sfb.sfb01 = sfb.sfb86
+            LEFT JOIN oeb_file p_oeb ON p_oeb.oeb01 = p_sfb.sfb22 AND p_oeb.oeb03 = p_sfb.sfb221
+            LEFT JOIN ksg_file p_ksg ON p_ksg.ksg01 = p_sfb.sfb91 AND p_ksg.ksg02 = p_sfb.sfb92
+            WHERE ecm.ecmacti = 'Y'
+                AND sfb.sfb04 IN ('4','5','6')
+                AND (eca.eca03 LIKE 'T234%' OR NVL(ecm.ecm52, 'N') = 'Y')
+                AND (NVL(ecm.ecm301,0) + NVL(ecm.ecm302,0) + NVL(ecm.ecm303,0)
+                     - NVL(ecm.ecm311,0) - NVL(ecm.ecm312,0) - NVL(ecm.ecm313,0)
+                     - NVL(ecm.ecm314,0) - NVL(ecm.ecm316,0)) > 0
+            ORDER BY sfb.sfb01, ecm.ecm03
+            """, nativeQuery = true)
+    List<Object[]> findScheduleBoardRows();
+
+    /**
      * 產能需求明細（按工作站組別或委外廠商）
      * row[0] ecm01(工單), row[1] ecm03(製程序), row[2] ecm06(工作站),
      * row[3] sfb05(料號), row[4] ima02(品名),
