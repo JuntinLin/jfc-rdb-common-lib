@@ -649,6 +649,21 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
     List<Object[]> findCapacityRows();
 
     /**
+     * 產能資源清單（APS 用，不受工單活動篩選）：加工課全部工作站 + 曾用於委外製程的廠商
+     * row[0] groupCode, row[1] groupName, row[2] groupType ('DEPT'/'OUTSOURCE'), row[3] deptCode
+     */
+    @Query(value = """
+            SELECT eca.eca01 AS group_code, eca.eca02 AS group_name, 'DEPT' AS group_type, eca.eca03 AS dept_code
+            FROM eca_file eca
+            WHERE eca.eca03 LIKE 'T234%'
+            UNION
+            SELECT pmc.pmc01 AS group_code, NVL(pmc.pmc03, pmc.pmc01) AS group_name, 'OUTSOURCE' AS group_type, NULL AS dept_code
+            FROM pmc_file pmc
+            WHERE pmc.pmc01 IN (SELECT DISTINCT ecm67 FROM ecm_file WHERE ecm67 IS NOT NULL AND ecmacti = 'Y')
+            """, nativeQuery = true)
+    List<Object[]> findAllResourceGroups();
+
+    /**
      * 產能需求明細（按工作站組別或委外廠商）
      * row[0] ecm01(工單), row[1] ecm03(製程序), row[2] ecm06(工作站),
      * row[3] sfb05(料號), row[4] ima02(品名),
