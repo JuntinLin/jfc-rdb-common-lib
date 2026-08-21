@@ -1,6 +1,7 @@
 package com.jfc.rdb.postgres.repository.pcn;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,4 +18,6 @@ public interface OrderChangeNotifiedRepository extends JpaRepository<OrderChange
     boolean existsByOrderNoAndChangeSeq(String orderNo, BigDecimal changeSeq);
 
     List<OrderChangeNotified> findByStatus(String status);
+
+    List<OrderChangeNotified> findByNotifiedAtBetween(LocalDateTime start, LocalDateTime end);
 }
