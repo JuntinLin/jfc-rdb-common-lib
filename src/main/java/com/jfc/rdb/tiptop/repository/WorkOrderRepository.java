@@ -858,4 +858,42 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
             @Param("startDate") Date startDate,
             @Param("endDate") Date endDate);
 
+    /**
+     * RFQ③ 歷史相似品比對——單顆歷史加工成本：每作業序(shb06)取「最新一筆」ecb48後跨作業序相加。
+     * 見 docs/RFQ/③施工brief_Forge提案定案.md Nimbus核准回覆🔴必修：
+     * 不可用 Σ(distinct ecb48 by作業)，該作業序單價若五年間變過會被重複計入。
+     * ecb JOIN 條件沿用既有慣例（ecb02=sfb.sfb06 / ecb03=shb.shb06，ima01優先、ima571備援）。
+     * row[0] totalMachiningCost, row[1] opCount
+     */
+    @Query(value = """
+            SELECT SUM(t.price) AS totalMachiningCost, COUNT(*) AS opCount
+            FROM (
+                SELECT y.op_seq, y.price
+                FROM (
+                    SELECT shb.shb06 AS op_seq,
+                           COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY shb.shb06
+                               ORDER BY shb.shb03 DESC, shb.shb031 DESC
+                           ) AS rn
+                    FROM sfb_file sfb
+                    JOIN shb_file shb ON shb.shb05 = sfb.sfb01 AND shb.shbacti = 'Y'
+                    LEFT JOIN ima_file ima ON ima.ima01 = sfb.sfb05
+                    LEFT JOIN ecb_file ecb1 ON ecb1.ecb01 = ima.ima01
+                                            AND ecb1.ecb02 = sfb.sfb06
+                                            AND ecb1.ecb03 = shb.shb06
+                                            AND ecb1.ecbacti = 'Y'
+                    LEFT JOIN ecb_file ecb2 ON ecb2.ecb01 = ima.ima571
+                                            AND ecb2.ecb02 = sfb.sfb06
+                                            AND ecb2.ecb03 = shb.shb06
+                                            AND ecb2.ecbacti = 'Y'
+                                            AND ecb1.ecb48 IS NULL
+                    WHERE sfb.sfb05 = :partNo AND sfb.sfbacti = 'Y'
+                ) y
+                WHERE y.rn = 1
+            ) t
+            WHERE t.price IS NOT NULL
+            """, nativeQuery = true)
+    List<Object[]> findSimilarItemMachiningCost(@Param("partNo") String partNo);
+
 }

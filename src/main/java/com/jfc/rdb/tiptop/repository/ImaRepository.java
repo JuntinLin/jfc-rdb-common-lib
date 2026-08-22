@@ -54,7 +54,14 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
     // Count items with specific type and line
     @Query("SELECT COUNT(i) FROM ImaFile i WHERE i.ima09 = :type AND i.ima10 = :line")
     long countByIma09AndIma10(String type, String line);
-    
+
+    /**
+     * RFQ③ 歷史相似品比對——候選集：標準品(ima09 IN 'S','T') + 缸類分群碼白名單(ima10)
+     * 見 docs/RFQ/③施工brief_Forge提案定案.md（Nimbus 已核准）
+     */
+    @Query("SELECT i FROM ImaFile i WHERE i.ima09 IN ('S','T') AND i.ima10 IN :ima10Whitelist")
+    List<ImaFile> findSimilarItemCandidates(@Param("ima10Whitelist") List<String> ima10Whitelist);
+
 }
 
 

@@ -32,4 +32,16 @@ public interface PmnRepository extends JpaRepository<PmnFile, PmnFilePK> {
 			AND p.pmn04 = :mano
 			""")
 	List<BigDecimal> findPurchaseAmounts(@Param("mano") String mano);
+
+	/**
+	 * RFQ③ 歷史相似品比對——遞迴BOM材料成本：元件料號的採購單價（pmn04=元件料號，非委外工序代買價
+	 * pmn41/pmn46，兩者用途不同，見 docs/RFQ/Forge回覆_實際成本驗證.md）。
+	 * 沿用既有 codebase 慣例（見 WorkOrderRepository 多處 pmn 子查詢）：MAX(pmn31) WHERE pmn31 &gt; 0。
+	 */
+	@Query(value = """
+			SELECT MAX(n.pmn31)
+			FROM pmn_file n
+			WHERE n.pmn04 = :partNo AND n.pmn31 > 0
+			""", nativeQuery = true)
+	BigDecimal findLatestMaterialUnitPrice(@Param("partNo") String partNo);
 }
