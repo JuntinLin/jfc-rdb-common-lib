@@ -88,6 +88,9 @@ public class AnnualKpiForm {
     @Column(name = "quality_loss")
     private BigDecimal qualityLoss;
 
+    @Column(name = "customer_complaints")
+    private Integer customerComplaints;
+
     @Column(name = "annual_leave_entitled")
     private BigDecimal annualLeaveEntitled;
 
@@ -116,6 +119,7 @@ public class AnnualKpiForm {
         if (rewardPenaltyAdj == null) rewardPenaltyAdj = BigDecimal.ZERO;
         if (qualityIssues == null) qualityIssues = 0;
         if (qualityLoss == null) qualityLoss = BigDecimal.ZERO;
+        if (customerComplaints == null) customerComplaints = 0;
         if (proposalCount == null) proposalCount = 0;
     }
 

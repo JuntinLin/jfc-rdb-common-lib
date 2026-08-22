@@ -115,6 +115,9 @@ public class QuarterlyKpiForm {
     @Column(name = "quality_loss")
     private BigDecimal qualityLoss;
 
+    @Column(name = "customer_complaints")
+    private Integer customerComplaints;
+
     @Column(name = "supervisor_comment", columnDefinition = "TEXT")
     private String supervisorComment;
 
@@ -131,6 +134,7 @@ public class QuarterlyKpiForm {
         if (rewardPenaltyAdj == null) rewardPenaltyAdj = BigDecimal.ZERO;
         if (qualityIssues == null) qualityIssues = 0;
         if (qualityLoss == null) qualityLoss = BigDecimal.ZERO;
+        if (customerComplaints == null) customerComplaints = 0;
     }
 
     @PreUpdate
