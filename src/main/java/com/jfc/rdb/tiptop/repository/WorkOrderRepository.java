@@ -896,4 +896,40 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
             """, nativeQuery = true)
     List<Object[]> findSimilarItemMachiningCost(@Param("partNo") String partNo);
 
+    /**
+     * RFQ⑥ 階段二精算——單顆歷史加工成本逐作業序明細（展開 findSimilarItemMachiningCost 的丟棄明細）。
+     * 沿用完全相同的 WHERE/JOIN/ROW_NUMBER 邏輯，逐作業序相加須與該既有查詢的總額一致（見
+     * docs/RFQ/⑥階段二精算_task_brief.md，回報須附對帳）。
+     * row[0] opSeq(shb06), row[1] opCode(shb081), row[2] opName(shb082), row[3] latestUnitPrice
+     */
+    @Query(value = """
+            SELECT y.op_seq, y.op_code, y.op_name, y.price
+            FROM (
+                SELECT shb.shb06 AS op_seq,
+                       shb.shb081 AS op_code,
+                       shb.shb082 AS op_name,
+                       COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY shb.shb06
+                           ORDER BY shb.shb03 DESC, shb.shb031 DESC
+                       ) AS rn
+                FROM sfb_file sfb
+                JOIN shb_file shb ON shb.shb05 = sfb.sfb01 AND shb.shbacti = 'Y'
+                LEFT JOIN ima_file ima ON ima.ima01 = sfb.sfb05
+                LEFT JOIN ecb_file ecb1 ON ecb1.ecb01 = ima.ima01
+                                        AND ecb1.ecb02 = sfb.sfb06
+                                        AND ecb1.ecb03 = shb.shb06
+                                        AND ecb1.ecbacti = 'Y'
+                LEFT JOIN ecb_file ecb2 ON ecb2.ecb01 = ima.ima571
+                                        AND ecb2.ecb02 = sfb.sfb06
+                                        AND ecb2.ecb03 = shb.shb06
+                                        AND ecb2.ecbacti = 'Y'
+                                        AND ecb1.ecb48 IS NULL
+                WHERE sfb.sfb05 = :partNo AND sfb.sfbacti = 'Y'
+            ) y
+            WHERE y.rn = 1 AND y.price IS NOT NULL
+            ORDER BY y.op_seq
+            """, nativeQuery = true)
+    List<Object[]> findSimilarItemMachiningCostDetail(@Param("partNo") String partNo);
+
 }
