@@ -114,4 +114,11 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
      */
     @Query(value = "SELECT COUNT(*) FROM Department WHERE Principal = :employeeId", nativeQuery = true)
     int countByPrincipal(@Param("employeeId") java.util.UUID employeeId);
+
+    /**
+     * 查詢指定員工擔任負責人（Department.Principal）的所有有效部門代碼——
+     * 用於處理「本職在A部門、兼任B部門負責人」，Employee.DepartmentId 反推不出來
+     */
+    @Query(value = "SELECT Code FROM Department WHERE Principal = :employeeId AND Flag = 1", nativeQuery = true)
+    java.util.List<String> findDeptCodesByPrincipal(@Param("employeeId") java.util.UUID employeeId);
 }
