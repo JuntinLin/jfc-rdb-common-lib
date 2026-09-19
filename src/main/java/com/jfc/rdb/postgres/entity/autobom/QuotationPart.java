@@ -65,7 +65,11 @@ public class QuotationPart {
     @Column(name = "price_source", length = 20)
     private String priceSource;
 
-    /** price book 該筆是否為「近12月無採購、退回歷史最新價」。 */
+    /** price book 該筆是否為「近12月無採購、退回歷史最新價」（PURCHASED）或樣本不足/過舊（MACHINED）。 */
     @Column(name = "stale")
     private Boolean stale;
+
+    /** RFQ⑤-C 原料牌號定價來源：MATERIAL_GRADE/MATERIAL_CATEGORY/FALLBACK，PURCHASED 件為 null。 */
+    @Column(name = "material_price_source", length = 20)
+    private String materialPriceSource;
 }

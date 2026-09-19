@@ -79,6 +79,21 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
             """, nativeQuery = true)
     List<Object[]> findPurchasedItemsForPriceBook();
 
+    /**
+     * RFQ⑤-C 原料 NT/kg price book 推導 job——秤重原料件範圍。
+     * 見 docs/RFQ/Forge回覆_⑤-C材質NTperKG前置探勘.md：`ima10='300'`本身不乾淨（混軸承/
+     * 油封修理包/油壓配管等市購件），須另加 `ima06` 白名單只留真正秤重原料（銅棒/鋼板/
+     * 鋁棒/鋁管/不鏽鋼圓棒等）。
+     * row[0] partNo(ima01), row[1] name(ima02), row[2] spec(ima021), row[3] subCategory(ima06)
+     */
+    @Query(value = """
+            SELECT i.ima01, i.ima02, i.ima021, i.ima06
+            FROM ima_file i
+            WHERE i.ima08 = 'P' AND i.ima10 = '300'
+            AND i.ima06 IN ('301','302','303','305','307','308','310','312','315')
+            """, nativeQuery = true)
+    List<Object[]> findRawMaterialItemsForPriceBook();
+
 }
 
 
