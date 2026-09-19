@@ -60,4 +60,12 @@ public class QuotationPart {
 
     @Column(name = "subtotal", precision = 14, scale = 2)
     private BigDecimal subtotal;
+
+    /** RFQ⑤-A 市購件雙層定價來源：SPEC/CATEGORY_MEDIAN/FALLBACK，MACHINED 件為 null。 */
+    @Column(name = "price_source", length = 20)
+    private String priceSource;
+
+    /** price book 該筆是否為「近12月無採購、退回歷史最新價」。 */
+    @Column(name = "stale")
+    private Boolean stale;
 }

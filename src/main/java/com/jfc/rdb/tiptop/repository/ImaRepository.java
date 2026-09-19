@@ -62,6 +62,23 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
     @Query("SELECT i FROM ImaFile i WHERE i.ima09 IN ('S','T') AND i.ima10 IN :ima10Whitelist")
     List<ImaFile> findSimilarItemCandidates(@Param("ima10Whitelist") List<String> ima10Whitelist);
 
+    /**
+     * RFQ⑤-A 市購件 price book 推導 job——市購品（ima08='P'）一階 BOM 範圍（AIR-S/OIL-S 全品線）。
+     * 見 docs/RFQ/Forge回覆_⑤-A市購件規格樣態探勘.md：市購旗標用 ima08='P'（非 ima10 範圍，
+     * 那混了自製結構件）；規格讀 ima021（非 ima02，後者無尺寸）；ima06 為次分類輔助。
+     * row[0] partNo(ima01), row[1] name(ima02), row[2] spec(ima021), row[3] subCategory(ima06)
+     */
+    @Query(value = """
+            SELECT DISTINCT i.ima01, i.ima02, i.ima021, i.ima06
+            FROM bmb_file b
+            JOIN ima_file m ON m.ima01 = b.bmb01
+            JOIN ima_file i ON i.ima01 = b.bmb03
+            WHERE m.ima10 IN ('140 AIR-S','130 OIL-S')
+            AND (b.bmb05 IS NULL OR b.bmb05 >= SYSDATE)
+            AND i.ima08 = 'P'
+            """, nativeQuery = true)
+    List<Object[]> findPurchasedItemsForPriceBook();
+
 }
 
 

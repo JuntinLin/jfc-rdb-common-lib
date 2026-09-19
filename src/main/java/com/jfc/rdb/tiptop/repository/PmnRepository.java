@@ -44,4 +44,18 @@ public interface PmnRepository extends JpaRepository<PmnFile, PmnFilePK> {
 			WHERE n.pmn04 = :partNo AND n.pmn31 > 0
 			""", nativeQuery = true)
 	BigDecimal findLatestMaterialUnitPrice(@Param("partNo") String partNo);
+
+	/**
+	 * RFQ⑤-A 市購件 price book 推導 job——單一料號的採購紀錄明細（單價/數量/單頭日期），
+	 * 供 Java 端做「近12月加權均→無則退歷來最新+標stale」與 3σ 異常值排除。
+	 * row[0] price(pmn31), row[1] qty(pmn20), row[2] orderDate(pmm04)
+	 */
+	@Query(value = """
+			SELECT n.pmn31, n.pmn20, mm.pmm04
+			FROM pmn_file n
+			LEFT JOIN pmm_file mm ON mm.pmm01 = n.pmn01
+			WHERE n.pmn04 = :partNo AND n.pmn31 > 0
+			ORDER BY mm.pmm04 DESC
+			""", nativeQuery = true)
+	List<Object[]> findPurchaseRecords(@Param("partNo") String partNo);
 }
