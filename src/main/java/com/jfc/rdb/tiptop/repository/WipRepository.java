@@ -315,10 +315,83 @@ ecm316	number(15,3)	工單轉出量       (-)
             @Param("deliveryDateBefore") String deliveryDateBefore);
     
     /**
+     * 查詢全部工作站（不限 ecm06）的製程明細，供閒置分析跨站彙總使用
+     * 與 findWipDetailByWorkstation 條件相同，只是不加 c.ecm06 = :workstationId 限制，
+     * 並多回傳 c.ecm06 (workstationId) 供前端依工作站分組
+     */
+    @Query(value = """
+            SELECT
+                c.ecm06 AS workstationId,	-- row[0]
+                a.sfb01 AS workOrderNo,	-- row[1]
+                a.sfb02 AS workOrderType,
+                a.sfb04 AS workOrderStatus,
+                a.sfb05 AS partNumber,
+                i.ima02 AS partName,
+                c.ecm03 AS routingSeq,	-- row[6]
+                e.ecd02 AS routingDesc,
+                -- 實際開工日邏輯（與 findWipDetailByWorkstation 相同）
+    			CASE
+        			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
+        			then a.sfb25
+        			ELSE (
+            			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI'))
+            			FROM shb_file
+            			WHERE shb05 = a.sfb01
+             		 	AND shb06 < c.ecm03
+             		 	AND shb111 > 0
+              			AND shbacti = 'Y'
+			          )
+			      	END AS estimatedStartDate,
+                a.sfb08 AS productionQty,
+                a.sfb09 AS completedQty,
+                NVL(c.ecm301, 0) AS goodTransferIn,
+                NVL(c.ecm302, 0) AS reworkTransferIn,
+                NVL(c.ecm303, 0) AS orderTransferIn,
+                NVL(c.ecm311, 0) AS goodTransferOut,
+                NVL(c.ecm312, 0) AS reworkTransferOut,
+                NVL(c.ecm313, 0) AS scrapQty,
+                NVL(c.ecm314, 0) AS offlineQty,
+                NVL(c.ecm316, 0) AS orderTransferOut,
+                (NVL(c.ecm301,0) + NVL(c.ecm302,0) + NVL(c.ecm303,0)
+                 - NVL(c.ecm311,0) - NVL(c.ecm312,0) - NVL(c.ecm313,0)
+                 - NVL(c.ecm314,0) - NVL(c.ecm316,0)) AS wipQuantity,
+                a.sfb22 AS salesOrderNo,
+                a.sfb221 AS salesOrderSeq,
+                a.sfb91 AS manufactureNoticeNo,
+                a.sfb92 AS manufactureNoticeSeq,
+                a.sfb86 AS sourceWorkOrderNo,
+                p.sfb22 AS parentSalesOrderNo,
+                p.sfb221 AS parentSalesOrderSeq,
+                p.sfb91 AS parentManufactureNoticeNo,
+                p.sfb92 AS parentManufactureNoticeSeq,
+                COALESCE(b.oeb15, g.ksg04, pb.oeb15, pg.ksg04) AS promisedDeliveryDate,
+                COALESCE(b.ta_oeb15, pb.ta_oeb15) AS extendedDeliveryDate,
+                d.eca02 AS workstationName
+            FROM sfb_file a
+            left outer join oeb_file b on a.sfb22 = b.oeb01 and a.sfb221 = b.oeb03
+            LEFT OUTER JOIN ksg_file g ON a.sfb91 = g.ksg01 AND a.sfb92 = g.ksg02
+            INNER JOIN ecm_file c ON a.sfb01 = c.ecm01
+            LEFT JOIN eca_file d ON c.ecm06 = d.eca01
+            LEFT JOIN ecd_file e ON c.ecm04 = e.ecd01
+            LEFT JOIN ima_file i ON a.sfb05 = i.ima01
+            LEFT JOIN sfb_file p ON a.sfb86 = p.sfb01
+            left outer join oeb_file pb on p.sfb22 = pb.oeb01 and p.sfb221 = pb.oeb03
+    		LEFT OUTER JOIN ksg_file pg ON p.sfb91 = pg.ksg01 AND p.sfb92 = pg.ksg02
+            WHERE a.sfb04 IN ('4', '5', '6')
+              AND a.sfbacti = 'Y'
+              AND c.ecmacti = 'Y'
+              AND (NVL(c.ecm301,0) + NVL(c.ecm302,0) + NVL(c.ecm303,0)
+                   - NVL(c.ecm311,0) - NVL(c.ecm312,0) - NVL(c.ecm313,0)
+                   - NVL(c.ecm314,0) - NVL(c.ecm316,0)) > 0
+            ORDER BY c.ecm06, a.sfb01, c.ecm03
+            """, nativeQuery = true)
+    List<Object[]> findAllWipDetail();
+
+    /**
      * 查詢指定工單在指定工作站的製程明細
      */
     @Query(value = """
-            SELECT 
+            SELECT
                 a.sfb01 AS workOrderNo,
                 a.sfb02 AS workOrderType,
                 a.sfb04 AS workOrderStatus,

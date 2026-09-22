@@ -123,7 +123,7 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
      *
      * 「尚未出圖」= oebud10 NOT IN (-1, 4)，即非免出圖且非完成
      *
-     * 回傳欄位與 findUndeliveryOrders 相同（row[0]~row[27]），
+     * 回傳欄位與 findUndeliveryOrders 相同（row[0]~row[31]），
      * 可直接複用 DeliveryEstimateService.mapToOrderItemDTO()
      *
      * @return 尚未出圖的未出貨訂單列表
@@ -160,7 +160,8 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             occ.occ21 as custCountry,
             occ.occud06 as custUd06,
             occ03 || '-' || oca02 as customerCategory,
-            occ21 || '-' || geb02 as countryName
+            occ21 || '-' || geb02 as countryName,
+            occ.occ04 as salesmanCode
         FROM oeb_file oeb
         INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
         LEFT JOIN occ_file occ ON occ.occ01 = oea.oea03
@@ -199,6 +200,92 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         ORDER BY oea.oea02, oeb.oeb01, oeb.oeb03
         """, nativeQuery = true)
     List<Object[]> findUndesignOrders();
+
+    /**
+     * 查詢已出圖但尚未開工單的未出貨訂單（生管「已出圖未開工單」閒置分析用）
+     *
+     * 設計狀態碼 oebud10:
+     *   -1.免出圖  0.未指派  1.已指派  2.確認中  3.執行中  4.完成
+     *
+     * 「已出圖未開工單」= oebud10 = 4（已完成出圖）AND 尚無對應工單(sfb.sfb01 IS NULL)
+     *
+     * 回傳欄位與 findUndesignOrders/findUndeliveryOrders 相同（row[0]~row[31]），
+     * 可直接複用 DeliveryEstimateService.mapToOrderItemDTO()
+     *
+     * @return 已出圖未開工單的未出貨訂單列表
+     */
+    @Query(value = """
+        SELECT
+            oeb.oeb01,
+            oeb.oeb03,
+            oea.oea03,
+            oea.oea032,
+            imz.imz02 as productType,
+            ima.ima09 as spl,
+            ima.ima02,
+            ima.ima021,
+            oea.oea02,
+            oeb.oeb15,
+            oeb.oeb12,
+            oeb.oeb24,
+            oeb.oeb13,
+            COALESCE(stk.stockAmount, 0) as stockAmount,
+            oeb.oebud10,
+            oeb.oebud15,
+            sfb.sfb01,
+            gen.gen02 as creator,
+            oea.oea24,
+            COALESCE(sfb.sfb09, 0) as sfb09,
+            COALESCE(sfb.sfb08, 0) as sfb08,
+            pmo.tc_pmo01 AS mergeWorkOrderNo,
+            sfw.sfw01,
+            oeb.ta_oeb15 AS extendedDeliveryDate,
+            ogb.ogb12 as ogb12,
+            sales.gen02 as salesman,
+            occ.occ03 as custIndustry,
+            occ.occ21 as custCountry,
+            occ.occud06 as custUd06,
+            occ03 || '-' || oca02 as customerCategory,
+            occ21 || '-' || geb02 as countryName,
+            occ.occ04 as salesmanCode
+        FROM oeb_file oeb
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        LEFT JOIN occ_file occ ON occ.occ01 = oea.oea03
+        LEFT JOIN oca_file oca ON occ.occ03 = oca.oca01
+        LEFT JOIN geb_file geb ON occ.occ21 = geb.geb01
+        LEFT JOIN gen_file sales ON sales.gen01 = occ.occ04
+        LEFT JOIN ima_file ima ON ima.ima01 = oeb.oeb04
+        LEFT JOIN imz_file imz ON ima.ima06 = imz.imz01
+        LEFT JOIN gen_file gen ON gen.gen01 = oea.oeaoriu
+        LEFT JOIN sfb_file sfb ON sfb.sfb22 = oeb.oeb01 AND sfb.sfb221 = oeb.oeb03 AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
+        LEFT JOIN tc_pmo_file pmo ON (oeb.oeb01 || '-' || oeb.oeb03) = pmo.tc_pmo05 AND pmo.tc_pmo01 LIKE 'T51%' AND pmo.tc_pmo02 = 0
+        LEFT JOIN (
+            SELECT MIN(sfw01) as sfw01, sfw03
+            FROM sfw_file
+            GROUP BY sfw03
+        ) sfw ON sfw.sfw03 LIKE '%' || oeb.oeb01 || '%'
+        LEFT JOIN (
+            SELECT img01, SUM(img10) as stockAmount
+            FROM img_file
+            WHERE img23 = 'Y' AND img10 > 0
+            GROUP BY img01
+        ) stk ON stk.img01 = oeb.oeb04
+        LEFT JOIN (
+            SELECT ogb31, ogb32, SUM(ogb12) as ogb12
+            FROM ogb_file
+            LEFT OUTER JOIN oga_file ON oga01 = ogb01
+            WHERE ogaconf = 'Y' AND oga09 = '2'
+            GROUP BY ogb31, ogb32
+        ) ogb ON ogb.ogb31 = oeb.oeb01 AND ogb.ogb32 = oeb.oeb03
+        WHERE oeb.oeb12 - oeb.oeb24 > 0
+          AND oea.oea49 IN ('0', '1', 'S')
+          AND oea.oeaconf = 'Y'
+          AND (oeb.oeb70 IS NULL OR oeb.oeb70 != 'Y')
+          AND oeb.oebud10 = 4
+          AND sfb.sfb01 IS NULL
+        ORDER BY oeb.oebud15, oea.oea02, oeb.oeb01, oeb.oeb03
+        """, nativeQuery = true)
+    List<Object[]> findDesignedNoOrder();
 
     /**
      * 查詢已出貨未簽收
@@ -433,6 +520,49 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
         ORDER BY TRUNC(oma.oma02, 'MM')
         """, nativeQuery = true)
     List<Object[]> findInvoiceAmountByMonth(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
+    /**
+     * 油壓缸/空壓缸出貨體積重量預估——候選訂單明細（依約定交貨日/展延日篩選未出貨數量>0的缸類品項）。
+     * 總經理交辦：依內徑/行程概算體積重量，統計未來N天出貨量。
+     *
+     * ima10 分群碼白名單同 RFQ③ 相似品比對（autobom.similar-item.ima10-whitelist）：
+     * '130 OIL-S'=油壓缸標準品, '140 AIR-S'=空壓缸標準品。
+     * bore/rod/stroke 由呼叫端從 ima02 品名解析（CylinderSpecParser），此處僅回傳原始欄位。
+     *
+     * row: 0 oeb01(訂單號) 1 oeb03(項次) 2 oea03(客戶代號) 3 oea032(客戶簡稱) 4 salesman(業務員)
+     *      5 ima01(料號) 6 ima02(品名) 7 ima021(規格) 8 ima10(分群碼)
+     *      9 unshippedQty(oeb12-oeb24) 10 effectiveDelivery
+     */
+    @Query(value = """
+        SELECT
+            oeb.oeb01,
+            oeb.oeb03,
+            oea.oea03,
+            oea.oea032,
+            sales.gen02 as salesman,
+            ima.ima01,
+            ima.ima02,
+            ima.ima021,
+            ima.ima10,
+            (oeb.oeb12 - oeb.oeb24) as unshippedQty,
+            COALESCE(oeb.ta_oeb15, oeb.oeb15) AS effectiveDelivery
+        FROM oeb_file oeb
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        LEFT JOIN occ_file occ ON occ.occ01 = oea.oea03
+        LEFT JOIN gen_file sales ON sales.gen01 = occ.occ04
+        LEFT JOIN ima_file ima ON ima.ima01 = oeb.oeb04
+        WHERE ima.ima10 IN :ima10Whitelist
+          AND oeb.oeb12 - oeb.oeb24 > 0
+          AND oea.oea49 IN ('0', '1', 'S')
+          AND oea.oeaconf = 'Y'
+          AND (oeb.oeb70 IS NULL OR oeb.oeb70 != 'Y')
+          AND COALESCE(oeb.ta_oeb15, oeb.oeb15) BETWEEN :startDate AND :endDate
+        ORDER BY COALESCE(oeb.ta_oeb15, oeb.oeb15), oeb.oeb01, oeb.oeb03
+        """, nativeQuery = true)
+    List<Object[]> findCylinderShipmentForecast(
+            @Param("ima10Whitelist") List<String> ima10Whitelist,
             @Param("startDate") Date startDate,
             @Param("endDate") Date endDate);
 
