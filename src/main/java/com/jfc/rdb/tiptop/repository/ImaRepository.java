@@ -69,6 +69,16 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
     List<ImaFile> findSimilarItemCandidates(@Param("ima10Whitelist") List<String> ima10Whitelist);
 
     /**
+     * RFQ⑪ Phase 1 軸心/活塞桿——候選集：料號字首 2S016、2N016、2V016 開頭（SOP 確認：2=半成品
+     * 產品大類，S/N/V=其它分群碼一：標準1/便品修改/特殊），全歷史（含客製，比照 ⑬，不再
+     * 只收標準），型別看 ima02 品名前綴（AIR_/OIL_/HYD_），不在這層過濾。
+     * 見 docs/RFQ/⑪-Phase1軸心_build_task_brief.md。
+     */
+    @Query("SELECT i FROM ImaFile i WHERE (i.ima01 LIKE '2S016%' OR i.ima01 LIKE '2N016%' OR i.ima01 LIKE '2V016%') "
+            + "AND (i.imaacti IS NULL OR i.imaacti = 'Y')")
+    List<ImaFile> findAxleCandidates();
+
+    /**
      * RFQ⑤-A 市購件 price book 推導 job——市購品（ima08='P'）一階 BOM 範圍（AIR-S/OIL-S 全品線）。
      * 見 docs/RFQ/Forge回覆_⑤-A市購件規格樣態探勘.md：市購旗標用 ima08='P'（非 ima10 範圍，
      * 那混了自製結構件）；規格讀 ima021（非 ima02，後者無尺寸）；ima06 為次分類輔助。
