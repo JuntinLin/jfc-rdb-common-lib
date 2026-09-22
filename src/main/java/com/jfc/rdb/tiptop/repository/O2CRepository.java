@@ -648,6 +648,23 @@ public interface O2CRepository extends JpaRepository<OebFile, OebFilePK> {
     List<Object[]> findShipmentsByOebNos(@Param("oeb01List") List<String> oeb01List);
 
     /**
+     * 依訂單項次批次找「搭別項次便車」的分攤工單（fallback，僅在 findWorkOrdersByOebNos 直接比對
+     * sfb22/sfb221 查不到工單時才需要用到）：一張工單可能透過 tc_pmo_file 同時分攤生產給多個訂單項次，
+     * 直接比對 sfb22/sfb221 只抓得到工單開立當下綁定的那個項次，其餘搭便車的項次要靠這張分攤表補。
+     * tc_pmo02=0 限定自製工單分攤（=1 是委外採購分攤，不是 sfb_file 工單，不適用此查詢）。
+     * row[0]=訂單項次(oeb01-oeb03，即 tc_pmo05), [1]=工單號(sfb01), [2]=工單開立日(sfb81)
+     */
+    @Query(value = """
+        SELECT tc.tc_pmo05 AS itemKey, sfb.sfb01 AS workOrderNo, sfb.sfb81 AS woCreateDate
+        FROM tc_pmo_file tc
+        JOIN sfb_file sfb ON sfb.sfb01 = tc.tc_pmo01
+        WHERE tc.tc_pmo02 = 0
+          AND tc.tc_pmo05 IN :itemKeys
+          AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
+        """, nativeQuery = true)
+    List<Object[]> findFallbackWorkOrdersByItemKeys(@Param("itemKeys") List<String> itemKeys);
+
+    /**
      * 依客戶代號批次找客戶名稱與負責業務（LEFT JOIN，不因缺碼影響其他客戶；缺碼由 Service 端組成資料異常清單）：
      * row[0]=客戶代號(occ01), [1]=客戶名稱(occ02), [2]=負責業務姓名(gen02)
      */
