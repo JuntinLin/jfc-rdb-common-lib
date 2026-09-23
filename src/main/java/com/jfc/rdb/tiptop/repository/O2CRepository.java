@@ -591,6 +591,43 @@ public interface O2CRepository extends JpaRepository<OebFile, OebFilePK> {
             @Param("startDate") Date startDate,
             @Param("endDate") Date endDate);
 
+    /**
+     * Stage A（完工入庫，供歷史趨勢報表用）：以工單完工入庫日(sfu02)篩選，同時考慮
+     * 直接綁定的工單(sfb22/sfb221)跟透過 tc_pmo_file 分攤搭便車的工單(tc_pmo02=0 自製)，
+     * 否則會漏掉像 T338-26080039-10 這種搭別項次工單便車出貨的訂單。
+     */
+    @Query(value = """
+        WITH stocked_in_wo AS (
+            SELECT DISTINCT sfv.sfv11 AS workOrderNo
+            FROM sfv_file sfv
+            INNER JOIN sfu_file sfu ON sfu.sfu01 = sfv.sfv01
+            WHERE sfu.sfu02 BETWEEN :startDate AND :endDate
+        )
+        SELECT DISTINCT oeb.oeb01, oeb.oeb03, oea.oea03, oea.oea032, oea.oea02, oeb.oeb04,
+            oeb.oeb12, oeb.oeb24, oeb.oebud15, oeb.oeb15, oeb.ta_oeb15, oeb.ta_oeb13,
+            oeb.ta_oeb11, oeb.ta_oeb12, oeb.ta_oeb14, oeb.oebud10, oeb.oebud13, oeb.oebud14
+        FROM stocked_in_wo swo
+        INNER JOIN sfb_file sfb ON sfb.sfb01 = swo.workOrderNo AND sfb.sfbacti = 'Y' AND sfb.sfb87 = 'Y'
+        INNER JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND TO_CHAR(oeb.oeb03) = TO_CHAR(sfb.sfb221)
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+
+        UNION
+
+        SELECT DISTINCT oeb.oeb01, oeb.oeb03, oea.oea03, oea.oea032, oea.oea02, oeb.oeb04,
+            oeb.oeb12, oeb.oeb24, oeb.oebud15, oeb.oeb15, oeb.ta_oeb15, oeb.ta_oeb13,
+            oeb.ta_oeb11, oeb.ta_oeb12, oeb.ta_oeb14, oeb.oebud10, oeb.oebud13, oeb.oebud14
+        FROM stocked_in_wo swo
+        INNER JOIN tc_pmo_file tc ON tc.tc_pmo01 = swo.workOrderNo AND tc.tc_pmo02 = 0
+        INNER JOIN sfb_file sfb2 ON sfb2.sfb01 = tc.tc_pmo01 AND sfb2.sfbacti = 'Y' AND sfb2.sfb87 = 'Y'
+        INNER JOIN oeb_file oeb ON oeb.oeb01 = SUBSTR(tc.tc_pmo05, 1, INSTR(tc.tc_pmo05, '-', -1) - 1)
+                                AND TO_CHAR(oeb.oeb03) = SUBSTR(tc.tc_pmo05, INSTR(tc.tc_pmo05, '-', -1) + 1)
+        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        ORDER BY 5, 1, 2
+        """, nativeQuery = true)
+    List<Object[]> findOrderItemsCompletedStockIn(
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate);
+
     // ---------- Stage B：批次補齊關聯資料（一次 IN 查詢取整批，避免 N+1） ----------
 
     /** 依訂單單號批次找已確認生產工單：row[0]=oeb01, [1]=oeb03, [2]=工單號(sfb01), [3]=工單開立日(sfb81) */
