@@ -43,6 +43,22 @@ public interface AttendanceCalendarRepository extends JpaRepository<AttendanceCa
                                              @Param("endDate") LocalDateTime endDate);
 
     /**
+     * 只取日期，不 hydrate 整個 entity——AttendanceCalendar 部分歷史資料的 GUID 欄位
+     * (corporationId/attendanceSpellId/employeeId/fiscalYearId) 格式不合法，SELECT ac 整包
+     * entity 會噴 "guid length must be 16"；只選 ac.date 這個 SQL Server DATETIME 欄位可繞開。
+     */
+    @Query("""
+        SELECT ac.date
+        FROM AttendanceCalendar ac
+        INNER JOIN ac.attendanceHolidayType aht
+        WHERE aht.code = '101'
+          AND ac.date >= :startDate AND ac.date < :endDate
+          AND ac.flag = true
+    """)
+    List<LocalDateTime> findWorkingDates(@Param("startDate") LocalDateTime startDate,
+                                          @Param("endDate") LocalDateTime endDate);
+
+    /**
      * 計算指定期間的總日曆天數
      */
     @Query("""
