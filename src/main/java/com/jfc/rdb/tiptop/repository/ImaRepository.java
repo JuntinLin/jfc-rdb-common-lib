@@ -79,6 +79,25 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
     List<ImaFile> findAxleCandidates();
 
     /**
+     * RFQ⑪ Phase 2 端蓋——候選集：品名含「前蓋」或「後蓋」，全歷史（含客製，比照⑬），
+     * imaacti 排壞不排客製。前蓋/後蓋合併一支候選池（Phase2-A 探勘證實料號家族本身共用、
+     * ima021 格式同構、真圖素材尺寸同為方棒僅長度不同），front/back 由呼叫端從品名判斷即可，
+     * 不需要另外分兩支查詢。見 docs/RFQ/⑪-Phase2_端蓋活塞_build_task_brief.md。
+     */
+    @Query("SELECT i FROM ImaFile i WHERE (i.ima02 LIKE '%前蓋%' OR i.ima02 LIKE '%後蓋%') "
+            + "AND (i.imaacti IS NULL OR i.imaacti = 'Y')")
+    List<ImaFile> findEndCoverCandidates();
+
+    /**
+     * RFQ⑪ Phase 2 活塞——候選集：品名含「活塞」，排除「油封」（Phase2-A 探勘證實「活塞油封」
+     * 是市購密封件非活塞本體，~1.1% 污染，已量化），全歷史（含客製，比照⑬），
+     * imaacti 排壞不排客製。見 docs/RFQ/⑪-Phase2_端蓋活塞_build_task_brief.md。
+     */
+    @Query("SELECT i FROM ImaFile i WHERE i.ima02 LIKE '%活塞%' AND i.ima02 NOT LIKE '%油封%' "
+            + "AND (i.imaacti IS NULL OR i.imaacti = 'Y')")
+    List<ImaFile> findPistonCandidates();
+
+    /**
      * RFQ⑤-A 市購件 price book 推導 job——市購品（ima08='P'）一階 BOM 範圍（AIR-S/OIL-S 全品線）。
      * 見 docs/RFQ/Forge回覆_⑤-A市購件規格樣態探勘.md：市購旗標用 ima08='P'（非 ima10 範圍，
      * 那混了自製結構件）；規格讀 ima021（非 ima02，後者無尺寸）；ima06 為次分類輔助。
