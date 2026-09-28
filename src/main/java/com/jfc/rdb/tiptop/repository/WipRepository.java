@@ -318,6 +318,14 @@ ecm316	number(15,3)	工單轉出量       (-)
      * 查詢全部工作站（不限 ecm06）的製程明細，供閒置分析跨站彙總使用
      * 與 findWipDetailByWorkstation 條件相同，只是不加 c.ecm06 = :workstationId 限制，
      * 並多回傳 c.ecm06 (workstationId) 供前端依工作站分組
+     *
+     * 額外納入「可發料未發料」工單：ecm06='00'(切料，業務上恆為第一道製程)、
+     * sfb04 未到4/5/6(尚未正式發料，WIP量恆為0)的工單，直接逕行視為WIP，
+     * 不需要額外查「是否為第一道製程」(MIN(ecm03))，因為00站本來就只會是第一站。
+     * 這類工單閒置天數改用工單開立日(sfb81)起算，非預計開工日。
+     * 2026-09-28 教訓：原本用獨立UNION查詢+MIN(ecm03)correlated subquery當JOIN條件，
+     * 造成/war-room/idle-summary、/workstation/idle-analysis嚴重逾時(4分鐘以上)，
+     * 已改成直接放寬本查詢WHERE條件，不新增JOIN，避免重蹈覆轍。
      */
     @Query(value = """
             SELECT
@@ -329,8 +337,9 @@ ecm316	number(15,3)	工單轉出量       (-)
                 i.ima02 AS partName,
                 c.ecm03 AS routingSeq,	-- row[6]
                 e.ecd02 AS routingDesc,
-                -- 實際開工日邏輯（與 findWipDetailByWorkstation 相同）
+                -- 實際開工日邏輯（與 findWipDetailByWorkstation 相同，另加00站可發料未發料分支）
     			CASE
+        			WHEN c.ecm06 = '00' AND a.sfb04 IN ('1', '2', '3') THEN a.sfb81
         			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
         			then a.sfb25
         			ELSE (
@@ -378,12 +387,16 @@ ecm316	number(15,3)	工單轉出量       (-)
             LEFT JOIN sfb_file p ON a.sfb86 = p.sfb01
             left outer join oeb_file pb on p.sfb22 = pb.oeb01 and p.sfb221 = pb.oeb03
     		LEFT OUTER JOIN ksg_file pg ON p.sfb91 = pg.ksg01 AND p.sfb92 = pg.ksg02
-            WHERE a.sfb04 IN ('4', '5', '6')
-              AND a.sfbacti = 'Y'
+            WHERE a.sfbacti = 'Y'
               AND c.ecmacti = 'Y'
-              AND (NVL(c.ecm301,0) + NVL(c.ecm302,0) + NVL(c.ecm303,0)
-                   - NVL(c.ecm311,0) - NVL(c.ecm312,0) - NVL(c.ecm313,0)
-                   - NVL(c.ecm314,0) - NVL(c.ecm316,0)) > 0
+              AND (
+                    (a.sfb04 IN ('4', '5', '6')
+                     AND (NVL(c.ecm301,0) + NVL(c.ecm302,0) + NVL(c.ecm303,0)
+                          - NVL(c.ecm311,0) - NVL(c.ecm312,0) - NVL(c.ecm313,0)
+                          - NVL(c.ecm314,0) - NVL(c.ecm316,0)) > 0)
+                    OR
+                    (c.ecm06 = '00' AND a.sfb04 IN ('1', '2', '3'))
+                  )
             ORDER BY c.ecm06, a.sfb01, c.ecm03
             """, nativeQuery = true)
     List<Object[]> findAllWipDetail();
