@@ -366,7 +366,8 @@ ecm316	number(15,3)	工單轉出量       (-)
                 p.sfb92 AS parentManufactureNoticeSeq,
                 COALESCE(b.oeb15, g.ksg04, pb.oeb15, pg.ksg04) AS promisedDeliveryDate,
                 COALESCE(b.ta_oeb15, pb.ta_oeb15) AS extendedDeliveryDate,
-                d.eca02 AS workstationName
+                d.eca02 AS workstationName,
+                c.ecm04 AS operationCode
             FROM sfb_file a
             left outer join oeb_file b on a.sfb22 = b.oeb01 and a.sfb221 = b.oeb03
             LEFT OUTER JOIN ksg_file g ON a.sfb91 = g.ksg01 AND a.sfb92 = g.ksg02
@@ -386,6 +387,25 @@ ecm316	number(15,3)	工單轉出量       (-)
             ORDER BY c.ecm06, a.sfb01, c.ecm03
             """, nativeQuery = true)
     List<Object[]> findAllWipDetail();
+
+    /**
+     * 戰情室看板用：指定單日(如上週五)各工作站+作業別的工單移轉數
+     * 定義：COUNT(DISTINCT shb05) — 當天有報工記錄的 distinct 工單數
+     * 依 ecm06(工作站)+ecm04(作業編號) 分組，供組立課 T07-A1/A2/A3 子群按作業區分
+     */
+    @Query(value = """
+            SELECT
+                ecm.ecm06 AS workstationId,
+                ecm.ecm04 AS operationCode,
+                COUNT(DISTINCT shb.shb05) AS transferCount
+            FROM shb_file shb
+            JOIN ecm_file ecm ON ecm.ecm01 = shb.shb05 AND ecm.ecm03 = shb.shb06
+            WHERE shb.shbacti = 'Y'
+              AND ecm.ecmacti = 'Y'
+              AND shb.shb03 = TO_DATE(:reportDate, 'YYYY-MM-DD')
+            GROUP BY ecm.ecm06, ecm.ecm04
+            """, nativeQuery = true)
+    List<Object[]> findWorkOrderTransferCountByWorkstation(@Param("reportDate") String reportDate);
 
     /**
      * 查詢指定工單在指定工作站的製程明細
