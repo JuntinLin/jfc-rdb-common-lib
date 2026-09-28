@@ -389,66 +389,6 @@ ecm316	number(15,3)	工單轉出量       (-)
     List<Object[]> findAllWipDetail();
 
     /**
-     * 「可發料未發料」工單：第一道製程在00(切料)、尚未進入正常WIP流程(sfb04 未到4/5/6)。
-     * 這類工單在 findAllWipDetail() 完全查不到(WIP量=0)，但實際上已經卡在切料站等待發料，
-     * 閒置天數改用「工單開立日」(sfb81)起算，非預計開工日。
-     * 回傳欄位與 findAllWipDetail() 完全相同順序，供 WipService 合併後共用同一套 mapping/閒置天數邏輯。
-     */
-    @Query(value = """
-            SELECT
-                c.ecm06 AS workstationId,
-                a.sfb01 AS workOrderNo,
-                a.sfb02 AS workOrderType,
-                a.sfb04 AS workOrderStatus,
-                a.sfb05 AS partNumber,
-                i.ima02 AS partName,
-                c.ecm03 AS routingSeq,
-                e.ecd02 AS routingDesc,
-                a.sfb81 AS estimatedStartDate,
-                a.sfb08 AS productionQty,
-                a.sfb09 AS completedQty,
-                0 AS goodTransferIn,
-                0 AS reworkTransferIn,
-                0 AS orderTransferIn,
-                0 AS goodTransferOut,
-                0 AS reworkTransferOut,
-                0 AS scrapQty,
-                0 AS offlineQty,
-                0 AS orderTransferOut,
-                0 AS wipQuantity,
-                a.sfb22 AS salesOrderNo,
-                a.sfb221 AS salesOrderSeq,
-                a.sfb91 AS manufactureNoticeNo,
-                a.sfb92 AS manufactureNoticeSeq,
-                a.sfb86 AS sourceWorkOrderNo,
-                p.sfb22 AS parentSalesOrderNo,
-                p.sfb221 AS parentSalesOrderSeq,
-                p.sfb91 AS parentManufactureNoticeNo,
-                p.sfb92 AS parentManufactureNoticeSeq,
-                COALESCE(b.oeb15, g.ksg04, pb.oeb15, pg.ksg04) AS promisedDeliveryDate,
-                COALESCE(b.ta_oeb15, pb.ta_oeb15) AS extendedDeliveryDate,
-                d.eca02 AS workstationName,
-                c.ecm04 AS operationCode
-            FROM sfb_file a
-            INNER JOIN ecm_file c ON a.sfb01 = c.ecm01
-                AND c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
-            LEFT JOIN eca_file d ON c.ecm06 = d.eca01
-            LEFT JOIN ecd_file e ON c.ecm04 = e.ecd01
-            LEFT JOIN ima_file i ON a.sfb05 = i.ima01
-            left outer join oeb_file b on a.sfb22 = b.oeb01 and a.sfb221 = b.oeb03
-            LEFT OUTER JOIN ksg_file g ON a.sfb91 = g.ksg01 AND a.sfb92 = g.ksg02
-            LEFT JOIN sfb_file p ON a.sfb86 = p.sfb01
-            left outer join oeb_file pb on p.sfb22 = pb.oeb01 and p.sfb221 = pb.oeb03
-            LEFT OUTER JOIN ksg_file pg ON p.sfb91 = pg.ksg01 AND p.sfb92 = pg.ksg02
-            WHERE a.sfb04 IN ('1', '2', '3')
-              AND a.sfbacti = 'Y'
-              AND c.ecmacti = 'Y'
-              AND c.ecm06 = '00'
-            ORDER BY a.sfb01
-            """, nativeQuery = true)
-    List<Object[]> findIssuableNotYetStarted();
-
-    /**
      * 戰情室看板用：指定單日(如上週五)各工作站+作業別的工單移轉數
      * 定義：COUNT(DISTINCT shb05) — 當天有報工記錄的 distinct 工單數
      * 依 ecm06(工作站)+ecm04(作業編號) 分組，供組立課 T07-A1/A2/A3 子群按作業區分
