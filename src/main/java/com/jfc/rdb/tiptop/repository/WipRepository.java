@@ -395,7 +395,12 @@ ecm316	number(15,3)	工單轉出量       (-)
                           - NVL(c.ecm311,0) - NVL(c.ecm312,0) - NVL(c.ecm313,0)
                           - NVL(c.ecm314,0) - NVL(c.ecm316,0)) > 0)
                     OR
-                    (c.ecm06 = '00' AND a.sfb04 IN ('1', '2', '3'))
+                    (c.ecm06 = '00' AND a.sfb04 IN ('1', '2', '3')
+                     -- 排除訂單早已出貨完畢/取消的孤兒工單(未關聯訂單者不受此限)：
+                     -- 曾撈到2016年建立、母訂單oeb12=oeb24(已出貨完畢)、sfb04從未推進的工單，
+                     -- 這種不是真的閒置，是ERP從未結案的殘留記錄
+                     AND (a.sfb22 IS NULL
+                          OR (NVL(b.oeb12,0) - NVL(b.oeb24,0) > 0 AND (b.oeb70 IS NULL OR b.oeb70 != 'Y'))))
                   )
             ORDER BY c.ecm06, a.sfb01, c.ecm03
             """, nativeQuery = true)
