@@ -165,9 +165,13 @@ ecm316	number(15,3)	工單轉出量       (-)
                 -- 新增：實際開工日邏輯
     			CASE 
         			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
-        			-- 第一站：優先取工單實際開工日(sfb25)，若尚未登記(常見於已發料但ERP未回填sfb25)
-        			-- 則退回領料單最後發料日(sfq_file/sfp_file的MAX(sfp03))，兩者在有sfb25時實測完全一致
-        			then COALESCE(a.sfb25, (SELECT MAX(sfp.sfp03) FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01))
+        			-- 第一站：取工單實際開工日(sfb25)與領料單最後發料日(mi.maxIssueDate)兩者較晚者。
+        			-- sfb25首次領料後不會隨後續補料更新，只看sfb25會抓到過早的日期(見T511-26090297案例：
+        			-- sfb25=首次領料日，實際最後一批料要到2天後才進，Excel戰情室報表看的是最後發料日)
+        			then CASE WHEN a.sfb25 IS NULL THEN mi.maxIssueDate
+        			          WHEN mi.maxIssueDate IS NULL THEN a.sfb25
+        			          ELSE GREATEST(a.sfb25, mi.maxIssueDate)
+        			     END
         			ELSE (
             			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
             			FROM shb_file -- 製程移轉單單頭
@@ -209,6 +213,7 @@ ecm316	number(15,3)	工單轉出量       (-)
             LEFT JOIN eca_file d ON c.ecm06 = d.eca01
             LEFT JOIN ecd_file e ON c.ecm04 = e.ecd01
             LEFT JOIN ima_file i ON a.sfb05 = i.ima01
+            LEFT JOIN (SELECT sfq.sfq02 AS wo, MAX(sfp.sfp03) AS maxIssueDate FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 GROUP BY sfq.sfq02) mi ON mi.wo = a.sfb01
             LEFT JOIN sfb_file p ON a.sfb86 = p.sfb01 --sfb86	varchar2(20)	母工單號碼
             -- 關聯銷售訂單
             left outer join oeb_file pb on p.sfb22 = pb.oeb01 and p.sfb221 = pb.oeb03 
@@ -237,9 +242,13 @@ ecm316	number(15,3)	工單轉出量       (-)
                 -- 新增：實際開工日邏輯
     			CASE 
         			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
-        			-- 第一站：優先取工單實際開工日(sfb25)，若尚未登記(常見於已發料但ERP未回填sfb25)
-        			-- 則退回領料單最後發料日(sfq_file/sfp_file的MAX(sfp03))，兩者在有sfb25時實測完全一致
-        			then COALESCE(a.sfb25, (SELECT MAX(sfp.sfp03) FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01))
+        			-- 第一站：取工單實際開工日(sfb25)與領料單最後發料日(mi.maxIssueDate)兩者較晚者。
+        			-- sfb25首次領料後不會隨後續補料更新，只看sfb25會抓到過早的日期(見T511-26090297案例：
+        			-- sfb25=首次領料日，實際最後一批料要到2天後才進，Excel戰情室報表看的是最後發料日)
+        			then CASE WHEN a.sfb25 IS NULL THEN mi.maxIssueDate
+        			          WHEN mi.maxIssueDate IS NULL THEN a.sfb25
+        			          ELSE GREATEST(a.sfb25, mi.maxIssueDate)
+        			     END
         			ELSE (
             			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
             			FROM shb_file -- 製程移轉單單頭
@@ -282,6 +291,7 @@ ecm316	number(15,3)	工單轉出量       (-)
             LEFT JOIN eca_file d ON c.ecm06 = d.eca01 --工作站基本資料(eca_file)
             LEFT JOIN ecd_file e ON c.ecm04 = e.ecd01 --作業資料(ecd_file)
             LEFT JOIN ima_file i ON a.sfb05 = i.ima01
+            LEFT JOIN (SELECT sfq.sfq02 AS wo, MAX(sfp.sfp03) AS maxIssueDate FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 GROUP BY sfq.sfq02) mi ON mi.wo = a.sfb01
             LEFT JOIN sfb_file p ON a.sfb86 = p.sfb01 --sfb86	varchar2(20)	母工單號碼
             -- 關聯銷售訂單
             left outer join oeb_file pb on p.sfb22 = pb.oeb01 and p.sfb221 = pb.oeb03 
@@ -343,9 +353,13 @@ ecm316	number(15,3)	工單轉出量       (-)
     			CASE
         			WHEN c.ecm06 = '00' AND a.sfb04 IN ('1', '2', '3') THEN a.sfb81
         			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
-        			-- 第一站：優先取工單實際開工日(sfb25)，若尚未登記(常見於已發料但ERP未回填sfb25)
-        			-- 則退回領料單最後發料日(sfq_file/sfp_file的MAX(sfp03))，兩者在有sfb25時實測完全一致
-        			then COALESCE(a.sfb25, (SELECT MAX(sfp.sfp03) FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01))
+        			-- 第一站：取工單實際開工日(sfb25)與領料單最後發料日(mi.maxIssueDate)兩者較晚者。
+        			-- sfb25首次領料後不會隨後續補料更新，只看sfb25會抓到過早的日期(見T511-26090297案例：
+        			-- sfb25=首次領料日，實際最後一批料要到2天後才進，Excel戰情室報表看的是最後發料日)
+        			then CASE WHEN a.sfb25 IS NULL THEN mi.maxIssueDate
+        			          WHEN mi.maxIssueDate IS NULL THEN a.sfb25
+        			          ELSE GREATEST(a.sfb25, mi.maxIssueDate)
+        			     END
         			ELSE (
             			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI'))
             			FROM shb_file
@@ -388,6 +402,7 @@ ecm316	number(15,3)	工單轉出量       (-)
             LEFT JOIN eca_file d ON c.ecm06 = d.eca01
             LEFT JOIN ecd_file e ON c.ecm04 = e.ecd01
             LEFT JOIN ima_file i ON a.sfb05 = i.ima01
+            LEFT JOIN (SELECT sfq.sfq02 AS wo, MAX(sfp.sfp03) AS maxIssueDate FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 GROUP BY sfq.sfq02) mi ON mi.wo = a.sfb01
             LEFT JOIN sfb_file p ON a.sfb86 = p.sfb01
             left outer join oeb_file pb on p.sfb22 = pb.oeb01 and p.sfb221 = pb.oeb03
     		LEFT OUTER JOIN ksg_file pg ON p.sfb91 = pg.ksg01 AND p.sfb92 = pg.ksg02
