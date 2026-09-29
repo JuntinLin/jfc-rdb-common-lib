@@ -165,8 +165,9 @@ ecm316	number(15,3)	工單轉出量       (-)
                 -- 新增：實際開工日邏輯
     			CASE 
         			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
-        			then a.sfb25
-       		 	-- THEN (SELECT MAX(sfp.sfp03) FROM sfq_file sfq left outer join sfp_file sfp on sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01) -- 第一站：取該工單最後發料日
+        			-- 第一站：優先取工單實際開工日(sfb25)，若尚未登記(常見於已發料但ERP未回填sfb25)
+        			-- 則退回領料單最後發料日(sfq_file/sfp_file的MAX(sfp03))，兩者在有sfb25時實測完全一致
+        			then COALESCE(a.sfb25, (SELECT MAX(sfp.sfp03) FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01))
         			ELSE (
             			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
             			FROM shb_file -- 製程移轉單單頭
@@ -236,8 +237,9 @@ ecm316	number(15,3)	工單轉出量       (-)
                 -- 新增：實際開工日邏輯
     			CASE 
         			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
-        			then a.sfb25
-       		 	-- THEN (SELECT MAX(sfp.sfp03) FROM sfq_file sfq left outer join sfp_file sfp on sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01) -- 第一站：取該工單最後發料日
+        			-- 第一站：優先取工單實際開工日(sfb25)，若尚未登記(常見於已發料但ERP未回填sfb25)
+        			-- 則退回領料單最後發料日(sfq_file/sfp_file的MAX(sfp03))，兩者在有sfb25時實測完全一致
+        			then COALESCE(a.sfb25, (SELECT MAX(sfp.sfp03) FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01))
         			ELSE (
             			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
             			FROM shb_file -- 製程移轉單單頭
@@ -341,7 +343,9 @@ ecm316	number(15,3)	工單轉出量       (-)
     			CASE
         			WHEN c.ecm06 = '00' AND a.sfb04 IN ('1', '2', '3') THEN a.sfb81
         			WHEN c.ecm03 = (SELECT MIN(ecm03) FROM ecm_file WHERE ecm01 = a.sfb01 AND ecmacti = 'Y')
-        			then a.sfb25
+        			-- 第一站：優先取工單實際開工日(sfb25)，若尚未登記(常見於已發料但ERP未回填sfb25)
+        			-- 則退回領料單最後發料日(sfq_file/sfp_file的MAX(sfp03))，兩者在有sfb25時實測完全一致
+        			then COALESCE(a.sfb25, (SELECT MAX(sfp.sfp03) FROM sfq_file sfq LEFT OUTER JOIN sfp_file sfp ON sfp.sfp01 = sfq.sfq01 WHERE sfq.sfq02 = a.sfb01))
         			ELSE (
             			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI'))
             			FROM shb_file
