@@ -172,13 +172,16 @@ ecm316	number(15,3)	工單轉出量       (-)
         			          WHEN mi.maxIssueDate IS NULL THEN a.sfb25
         			          ELSE GREATEST(a.sfb25, mi.maxIssueDate)
         			     END
-        			ELSE (
-            			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
+        			-- 非第一站：取上一站過站轉出日，查無過站記錄(shb_file無資料，如卡在中間站
+        			-- 又找不到轉出log的T513-26082071案例)則退回工單實際開工日(sfb25)，避免整列NULL被閒置分析漏抓
+        			ELSE COALESCE(
+            			(SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
             			FROM shb_file -- 製程移轉單單頭
             			WHERE shb05 = a.sfb01             -- 同一工單
              		 	AND shb06 < c.ecm03             -- 序號小於目前製程
              		 	AND shb111 > 0                  -- 有良品轉出數量
-              			AND shbacti = 'Y'               -- 資料有效
+              			AND shbacti = 'Y'),              -- 資料有效
+              			a.sfb25
 		          )
 		      	END AS estimatedStartDate,
                 a.sfb08 AS productionQty,
@@ -249,13 +252,16 @@ ecm316	number(15,3)	工單轉出量       (-)
         			          WHEN mi.maxIssueDate IS NULL THEN a.sfb25
         			          ELSE GREATEST(a.sfb25, mi.maxIssueDate)
         			     END
-        			ELSE (
-            			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
+        			-- 非第一站：取上一站過站轉出日，查無過站記錄(shb_file無資料，如卡在中間站
+        			-- 又找不到轉出log的T513-26082071案例)則退回工單實際開工日(sfb25)，避免整列NULL被閒置分析漏抓
+        			ELSE COALESCE(
+            			(SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI')) -- 假設 tc_srg10 為製程移轉單的過帳/轉出日，請依實際 Table 調整
             			FROM shb_file -- 製程移轉單單頭
             			WHERE shb05 = a.sfb01             -- 同一工單
              		 	AND shb06 < c.ecm03             -- 序號小於目前製程
              		 	AND shb111 > 0                  -- 有良品轉出數量
-              			AND shbacti = 'Y'               -- 資料有效
+              			AND shbacti = 'Y'),              -- 資料有效
+              			a.sfb25
 		          )
 		      	END AS estimatedStartDate,
                 a.sfb08 AS productionQty,
@@ -360,13 +366,15 @@ ecm316	number(15,3)	工單轉出量       (-)
         			          WHEN mi.maxIssueDate IS NULL THEN a.sfb25
         			          ELSE GREATEST(a.sfb25, mi.maxIssueDate)
         			     END
-        			ELSE (
-            			SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI'))
+        			-- 非第一站：查無過站記錄則退回工單實際開工日(sfb25)，避免整列NULL被閒置分析漏抓
+        			ELSE COALESCE(
+            			(SELECT MAX(TO_DATE(TO_CHAR(shb03, 'YYYYMMDD') || NVL(shb031, '00:00'), 'YYYYMMDDHH24:MI'))
             			FROM shb_file
             			WHERE shb05 = a.sfb01
              		 	AND shb06 < c.ecm03
              		 	AND shb111 > 0
-              			AND shbacti = 'Y'
+              			AND shbacti = 'Y'),
+              			a.sfb25
 			          )
 			      	END AS estimatedStartDate,
                 a.sfb08 AS productionQty,
