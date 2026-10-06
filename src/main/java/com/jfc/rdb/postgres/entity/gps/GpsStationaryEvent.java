@@ -9,7 +9,10 @@ import lombok.NoArgsConstructor;
 
 /**
  * 上班時間同一地點停留超過門檻的歷史事件（總經理交辦，2026-09-30）。
- * 由 GpsStationaryAlertService 在停留狀態結束時寫入（事件已結束才入庫，不收錄進行中的停留）。
+ * 停留一旦跨過門檻（如30分鐘）才開始入庫，之後每次輪詢更新同一筆（ongoing=true，
+ * end_time/duration_minutes持續往前推進），停留結束才標記 ongoing=false 定案。
+ * 2026-10-06 改為進行中就持續更新，不再只在結束時一次寫入——後端重啟時可從
+ * ongoing=true 的那筆資料接續計時，不會把進行中的停留時長歸零重算（總經理交辦）。
  */
 @Data
 @NoArgsConstructor
@@ -45,6 +48,10 @@ public class GpsStationaryEvent {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    /** true=停留仍在進行中、每次輪詢會更新這筆；false=已結束定案。 */
+    @Column(name = "ongoing", nullable = false)
+    private Boolean ongoing;
 
     @PrePersist
     protected void onCreate() {
