@@ -46,6 +46,9 @@ public class GpsStationaryEvent {
     @Column(name = "longitude")
     private Double longitude;
 
+    @Column(name = "address", length = 200)
+    private String address;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
