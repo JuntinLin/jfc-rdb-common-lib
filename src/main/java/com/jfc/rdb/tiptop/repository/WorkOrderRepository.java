@@ -436,6 +436,7 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      * 備援（同料件最近一筆有單價的歷史訂單，排除 336 單別）：
      *   - 製造通知單(KSG)工單無訂單 → 以工單料號 sfb05 找
      *   - 有訂單但訂單單價為 0（例 T331-26080482 項次 2/3）→ 以訂單品項料號 oeb04 找（2026-10-08 使用者指定）
+     * 最後備援：計價料號的料件訂價 ima127（axmi121 本幣未稅訂價，業務員維護；本幣不乘匯率）（2026-10-09 使用者指定）
      * 排除作業 05-D5（噴漆）
      * 多人報工按工時分攤
      *
@@ -458,22 +459,23 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                 ROUND(SUM(
                     CASE
                         WHEN rt.reporter_count = 1 THEN
-                            COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1), ksg_price.unit_price, 0) * NVL(shb.shb111, 0)
+                            COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1), ksg_price.unit_price, NULLIF(imap.ima127, 0), 0) * NVL(shb.shb111, 0)
                         ELSE
                             CASE WHEN rt.total_time > 0 THEN
                                 NVL(ecm.ecm311, 0)
-                                * COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1), ksg_price.unit_price, 0)
+                                * COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1), ksg_price.unit_price, NULLIF(imap.ima127, 0), 0)
                                 * (NVL(shb.shb032, 0) / rt.total_time)
                             ELSE 0 END
                     END
                 ), 2)                                           AS totalOutputValue,
-                SUM(CASE WHEN COALESCE(NULLIF(oeb.oeb13, 0), ksg_price.unit_price) IS NULL
-                           OR COALESCE(NULLIF(oeb.oeb13, 0), ksg_price.unit_price) = 0
+                SUM(CASE WHEN COALESCE(NULLIF(oeb.oeb13, 0), ksg_price.unit_price, NULLIF(imap.ima127, 0)) IS NULL
+                           OR COALESCE(NULLIF(oeb.oeb13, 0), ksg_price.unit_price, NULLIF(imap.ima127, 0)) = 0
                          THEN 1 ELSE 0 END)                     AS noPriceCount
             FROM shb_file shb
             JOIN sfb_file sfb ON sfb.sfb01 = shb.shb05 AND sfb.sfbacti = 'Y'
             LEFT JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
             LEFT JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+            LEFT JOIN ima_file imap ON imap.ima01 = COALESCE(oeb.oeb04, sfb.sfb05)
             LEFT JOIN ksg_file ksg ON ksg.ksg01 = sfb.sfb91 AND ksg.ksg02 = sfb.sfb92
             LEFT JOIN (
                 SELECT ob.oeb04, ob.oeb13 * NVL(oa.oea24, 1) AS unit_price, ob.oeb15,
@@ -514,11 +516,13 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      * row[3] shb03(完工日), row[4] shb081(作業編號), row[5] shb082(作業名稱),
      * row[6] ima01(料號), row[7] ima02(品名),
      * row[8] 訂單號(直接OEB或KSG), row[9] 項次,
-     * row[10] 最終單價(含匯率), row[11] 單價來源(ORDER/KSG/HISTORY/NONE；HISTORY=訂單單價0改用同料號歷史訂單單價),
+     * row[10] 最終單價(含匯率), row[11] 單價來源(ORDER/KSG/HISTORY/IMA127/NONE；HISTORY=訂單單價0改用同料號歷史訂單單價；IMA127=axmi121本幣未稅訂價),
      * row[12] shb111(良品數), row[13] shb112(報廢數),
      * row[14] shb032(工時min), row[15] shb033(機時min),
      * row[16] reporter_count, row[17] total_time, row[18] ecm311,
-     * row[19] occ01(客戶代號), row[20] occ02(客戶簡稱)
+     * row[19] occ01(客戶代號), row[20] occ02(客戶簡稱),
+     * row[21] 計價料號 COALESCE(oeb04, sfb05)（手動單價比對用）, row[22] shb04(報工人員)
+     * employeeNo 為 null 時查組立課（gen03 LIKE 'T235%'）全員，供手動單價套用彙總
      */
     @Query(value = """
             SELECT shb.shb01, shb.shb05, shb.shb06,
@@ -526,21 +530,25 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                    ima.ima01, ima.ima02,
                    COALESCE(oeb.oeb01, ksg.ksg01),
                    COALESCE(oeb.oeb03, ksg.ksg02),
-                   COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1), ksg_price.unit_price, 0),
+                   COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1), ksg_price.unit_price, NULLIF(imap.ima127, 0), 0),
                    CASE WHEN NVL(oeb.oeb13, 0) > 0 THEN 'ORDER'
                         WHEN ksg_price.unit_price IS NOT NULL AND oeb.oeb01 IS NULL THEN 'KSG'
                         WHEN ksg_price.unit_price IS NOT NULL THEN 'HISTORY'
+                        WHEN NVL(imap.ima127, 0) > 0 THEN 'IMA127'
                         ELSE 'NONE' END,
                    NVL(shb.shb111, 0), NVL(shb.shb112, 0),
                    NVL(shb.shb032, 0), NVL(shb.shb033, 0),
                    rt.reporter_count, rt.total_time, NVL(ecm.ecm311, 0),
                    COALESCE(occ.occ01, ksg_occ.occ01),
-                   COALESCE(occ.occ02, ksg_occ.occ02)
+                   COALESCE(occ.occ02, ksg_occ.occ02),
+                   COALESCE(oeb.oeb04, sfb.sfb05),
+                   shb.shb04
             FROM shb_file shb
             JOIN sfb_file sfb ON sfb.sfb01 = shb.shb05 AND sfb.sfbacti = 'Y'
             LEFT JOIN ima_file ima ON ima.ima01 = sfb.sfb05
             LEFT JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
             LEFT JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+            LEFT JOIN ima_file imap ON imap.ima01 = COALESCE(oeb.oeb04, sfb.sfb05)
             LEFT JOIN occ_file occ ON occ.occ01 = oea.oea04
             LEFT JOIN ksg_file ksg ON ksg.ksg01 = sfb.sfb91 AND ksg.ksg02 = sfb.sfb92
             LEFT JOIN (
@@ -564,10 +572,11 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                 WHERE s.shbacti = 'Y'
                 GROUP BY s.shb05, s.shb06
             ) rt ON rt.shb05 = shb.shb05 AND rt.shb06 = shb.shb06
+            LEFT JOIN gen_file gen ON gen.gen01 = shb.shb04
             WHERE shb.shbacti = 'Y'
               AND shb.shb03 BETWEEN :startDate AND :endDate
               AND shb.shb081 != '05-D5'
-              AND shb.shb04 = :employeeNo
+              AND (shb.shb04 = :employeeNo OR (:employeeNo IS NULL AND gen.gen03 LIKE 'T235%'))
             ORDER BY shb.shb03, shb.shb05, shb.shb06
             """, nativeQuery = true)
     List<Object[]> findAssemblyOutputDetail(
