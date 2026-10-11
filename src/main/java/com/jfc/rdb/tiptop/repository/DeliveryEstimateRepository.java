@@ -437,22 +437,35 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
 
     /**
      * 空油壓缸入庫金額（按入庫月份彙總）
-     * ima06 IN ('130','140') 油壓缸+空壓缸
+     * ima06 IN ('130','140') 油壓缸+空壓缸；含無訂單工單（製造通知 KSG／庫存工單）
+     * 單價順序（比照組立課產值，2026-10-11 使用者確認）：
+     *   訂單單價 oeb13×匯率 → 同料號最近一筆有單價歷史訂單（無訂單或訂單單價 0 時；排除 336 單別）
+     *   → axmi121 本幣未稅訂價 ima127（不乘匯率）→ 0
+     * 計價料號 = COALESCE(訂單品項料號 oeb04, 入庫料號 sfv04)
      * row[0] yearMonth (YYYY-MM), row[1] amount
      */
     @Query(value = """
         SELECT
             TO_CHAR(TRUNC(sfu.sfu02, 'MM'), 'YYYY-MM') AS yearMonth,
-            NVL(SUM(sfv.sfv09 * NVL(oea.oea24, 1) * NVL(oeb.oeb13, 0)), 0) AS amount
+            NVL(SUM(sfv.sfv09 * COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1),
+                                         hist.unit_price, NULLIF(imap.ima127, 0), 0)), 0) AS amount
         FROM sfv_file sfv
         INNER JOIN sfu_file sfu ON sfu.sfu01 = sfv.sfv01
         INNER JOIN sfb_file sfb ON sfb.sfb01 = sfv.sfv11
-        INNER JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
-        INNER JOIN oea_file oea ON oea.oea01 = oeb.oeb01
         INNER JOIN ima_file ima ON ima.ima01 = sfv.sfv04
+        LEFT JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
+        LEFT JOIN oea_file oea ON oea.oea01 = oeb.oeb01
+        LEFT JOIN ima_file imap ON imap.ima01 = COALESCE(oeb.oeb04, sfv.sfv04)
+        LEFT JOIN (
+            SELECT ob.oeb04, ob.oeb13 * NVL(oa.oea24, 1) AS unit_price,
+                   ROW_NUMBER() OVER (PARTITION BY ob.oeb04 ORDER BY ob.oeb15 DESC) AS rn
+            FROM oeb_file ob
+            JOIN oea_file oa ON oa.oea01 = ob.oeb01
+            WHERE ob.oeb13 > 0 AND SUBSTR(ob.oeb01, 2, 3) != '336'
+        ) hist ON hist.oeb04 = COALESCE(oeb.oeb04, sfv.sfv04) AND hist.rn = 1
+              AND (oeb.oeb01 IS NULL OR NVL(oeb.oeb13, 0) = 0)
         WHERE sfu.sfuconf = 'Y' AND sfu.sfupost = 'Y'
           AND ima.ima06 IN ('130', '140')
-          AND sfb.sfb22 IS NOT NULL
           AND sfu.sfu02 BETWEEN :startDate AND :endDate
         GROUP BY TRUNC(sfu.sfu02, 'MM')
         ORDER BY TRUNC(sfu.sfu02, 'MM')
