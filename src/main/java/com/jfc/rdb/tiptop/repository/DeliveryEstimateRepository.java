@@ -437,7 +437,8 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
 
     /**
      * 空油壓缸入庫金額（按入庫月份彙總）
-     * ima06 IN ('130','140') 油壓缸+空壓缸；含無訂單工單（製造通知 KSG／庫存工單）
+     * ima06 IN ('130','140') 油壓缸+空壓缸；訂單工單或製造通知(KSG)工單（不含純庫存工單）
+     * 其餘條件比照 lattsi「完工入庫金額統計」：已確認、已過帳、入庫料號前兩碼 '00' 不計（2021-05-31 規則）
      * 單價順序（比照組立課產值，2026-10-11 使用者確認）：
      *   訂單單價 oeb13×匯率 → 同料號最近一筆有單價歷史訂單（無訂單或訂單單價 0 時；排除 336 單別）
      *   → axmi121 本幣未稅訂價 ima127（不乘匯率）→ 0
@@ -466,6 +467,8 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
               AND (oeb.oeb01 IS NULL OR NVL(oeb.oeb13, 0) = 0)
         WHERE sfu.sfuconf = 'Y' AND sfu.sfupost = 'Y'
           AND ima.ima06 IN ('130', '140')
+          AND NOT (sfb.sfb22 IS NULL AND sfb.sfb91 IS NULL)
+          AND SUBSTR(sfv.sfv04, 1, 2) != '00'
           AND sfu.sfu02 BETWEEN :startDate AND :endDate
         GROUP BY TRUNC(sfu.sfu02, 'MM')
         ORDER BY TRUNC(sfu.sfu02, 'MM')
@@ -475,7 +478,8 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             @Param("endDate") Date endDate);
 
     /**
-     * 出貨金額（按出貨月份彙總）
+     * 出貨金額（按出貨月份彙總）— 口徑比照 lattsi OrderStatistic「出貨金額統計」
+     * 未稅 oga24 × ogb14；不要求過帳（lattsi 2017-04-27：未過帳多為客戶未簽收/無法扣帳，實際已出貨，須計入）
      * row[0] yearMonth (YYYY-MM), row[1] amount
      */
     @Query(value = """
@@ -484,7 +488,8 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             NVL(SUM(oga.oga24 * ogb.ogb14), 0) AS amount
         FROM oga_file oga
         LEFT OUTER JOIN ogb_file ogb ON ogb.ogb01 = oga.oga01
-        WHERE oga.ogaconf = 'Y' AND oga.ogapost = 'Y' AND oga.oga09 = '2'
+        WHERE oga.ogaconf = 'Y' AND oga.oga09 = '2'
+          AND ogb.ogb04 IS NOT NULL
           AND oga.oga02 BETWEEN :startDate AND :endDate
         GROUP BY TRUNC(oga.oga02, 'MM')
         ORDER BY TRUNC(oga.oga02, 'MM')
@@ -517,8 +522,8 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             @Param("endDate") Date endDate);
 
     /**
-     * 銷貨收入（應收帳款/開票）金額（按開票月份彙總）
-     * SUM(OMB16) 本幣金額
+     * 銷貨收入（應收帳款/開票）金額（按開票月份彙總）— 口徑比照 lattsi OrderStatistic「銷貨收入」
+     * SUM(OMB16) 本幣未稅；oma00='12'、排除作廢；不要求確認（lattsi 2024-04-01 起拿掉 omaconf='Y'）
      * row[0] yearMonth (YYYY-MM), row[1] amount
      */
     @Query(value = """
@@ -527,7 +532,7 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             NVL(SUM(omb.omb16), 0) AS amount
         FROM omb_file omb
         LEFT OUTER JOIN oma_file oma ON oma.oma01 = omb.omb01
-        WHERE oma.omaconf = 'Y' AND oma.omavoid = 'N' AND oma.oma00 = '12'
+        WHERE oma.omavoid = 'N' AND oma.oma00 = '12'
           AND oma.oma02 BETWEEN :startDate AND :endDate
         GROUP BY TRUNC(oma.oma02, 'MM')
         ORDER BY TRUNC(oma.oma02, 'MM')
