@@ -72,6 +72,18 @@ public class AppraisalForm {
     @Column(name = "other_leave")
     private BigDecimal otherLeave;
 
+    /** 國內出差工時（計入出勤率分子，不列入 otherLeave） */
+    @Column(name = "domestic_trip_hours")
+    private BigDecimal domesticTripHours;
+
+    /** 國外出差工時（計入出勤率分子，不列入 otherLeave） */
+    @Column(name = "overseas_trip_hours")
+    private BigDecimal overseasTripHours;
+
+    /** 天災假工時（計入出勤率分子，不列入 otherLeave） */
+    @Column(name = "natural_disaster_leave")
+    private BigDecimal naturalDisasterLeave;
+
     @Column(name = "late_count")
     private Integer lateCount;
 
