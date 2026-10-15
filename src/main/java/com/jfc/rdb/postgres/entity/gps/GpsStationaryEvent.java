@@ -13,6 +13,9 @@ import lombok.NoArgsConstructor;
  * end_time/duration_minutes持續往前推進），停留結束才標記 ongoing=false 定案。
  * 2026-10-06 改為進行中就持續更新，不再只在結束時一次寫入——後端重啟時可從
  * ongoing=true 的那筆資料接續計時，不會把進行中的停留時長歸零重算（總經理交辦）。
+ * 2026-10-12 新增 workMinutes：durationMinutes 是牆鐘時間（含下班/過夜），workMinutes
+ * 是跟上班時段（工作日×上班時段，扣午休）重疊的分鐘數——門檻判定、Email、頁面顯示的
+ * 「已停留」都用 workMinutes，durationMinutes 只保留「實際停了多久」這個事實供參考。
  */
 @Data
 @NoArgsConstructor
@@ -39,6 +42,10 @@ public class GpsStationaryEvent {
 
     @Column(name = "duration_minutes", nullable = false)
     private Integer durationMinutes;
+
+    /** 跟上班時段重疊的分鐘數（扣掉下班/過夜），門檻判定與顯示的「已停留」都用這個。 */
+    @Column(name = "work_minutes")
+    private Integer workMinutes;
 
     @Column(name = "latitude")
     private Double latitude;
