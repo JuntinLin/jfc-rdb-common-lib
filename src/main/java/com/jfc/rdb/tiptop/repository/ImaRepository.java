@@ -56,7 +56,8 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
     long countByIma09AndIma10(String type, String line);
 
     /**
-     * RFQ③ 歷史相似品比對——候選集：缸類分群碼白名單(ima10)，**全歷史（含客製 ima09=V/N/K）**。
+     * RFQ③ 歷史相似品比對——候選集：缸類分群碼依型別前綴（ima10 LIKE '130%'=OIL／'140%'=AIR），
+     * **全歷史（含客製 ima09=V/N/K）**。
      * 見 docs/RFQ/③施工brief_Forge提案定案.md（Nimbus 已核准，③ 原始設計）；
      * RFQ⑬ 修正：原本多加了 `ima09 IN ('S','T')` 只收標準品，君帆是客製廠，
      * 這條件會把 95%+ 的真實歷史品（客製 V）濾掉，候選池從應有的萬筆級別
@@ -64,9 +65,14 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
      * S/N/V 只在 DTO 層當顯示標籤（見 SimilarItemDTO.standardClass），
      * 不在候選撈取這層過濾。只排「壞資料」（停用/作廢，ima_file 無明確狀態
      * 欄可用時不加此條件），不排客製。見 docs/RFQ/⑬候選池放寬含客製_task_brief.md。
+     * RFQ⑯ 修正：原本白名單只收 2 個精確值（140 AIR-S,130 OIL-S，共 27 筆），真實客戶
+     * 訂單自身料號 95%+ 在白名單外（130 HC/MDH/HC2/HCCU/HCJ 等全線產品）。改用
+     * `130%`/`140%` 型別前綴涵蓋整條產品線（已用 VerifyPrefix 核對全母體：130=OIL／
+     * 140=AIR 前綴映射無跨型別污染）。見 docs/RFQ/⑮Dataset驗證矩陣.md 根因A、
+     * docs/RFQ/⑮Dataset驗證_Nimbus複核_與⑯下一刀.md。
      */
-    @Query("SELECT i FROM ImaFile i WHERE i.ima10 IN :ima10Whitelist AND (i.imaacti IS NULL OR i.imaacti = 'Y')")
-    List<ImaFile> findSimilarItemCandidates(@Param("ima10Whitelist") List<String> ima10Whitelist);
+    @Query("SELECT i FROM ImaFile i WHERE i.ima10 LIKE :ima10Prefix AND (i.imaacti IS NULL OR i.imaacti = 'Y')")
+    List<ImaFile> findSimilarItemCandidatesByTypePrefix(@Param("ima10Prefix") String ima10Prefix);
 
     /**
      * RFQ⑪ Phase 1 軸心/活塞桿——候選集：料號字首 2S016、2N016、2V016 開頭（SOP 確認：2=半成品

@@ -34,20 +34,14 @@ public interface PmnRepository extends JpaRepository<PmnFile, PmnFilePK> {
 	List<BigDecimal> findPurchaseAmounts(@Param("mano") String mano);
 
 	/**
-	 * RFQ③ 歷史相似品比對——遞迴BOM材料成本：元件料號的採購單價（pmn04=元件料號，非委外工序代買價
+	 * RFQ③ 歷史相似品比對——遞迴BOM材料成本：元件料號的採購紀錄明細（單價/數量/單頭日期），
+	 * 供 Java 端做「近12月加權均→無則退全歷史」與 3σ 異常值排除去離群後取穩健單價
+	 * （見 SimilarItemService.resolveRobustUnitPrice）。
+	 * RFQ⑯-B：原本的 {@code findLatestMaterialUnitPrice}（裸 MAX(pmn31)，方法名叫「latest」
+	 * 實際是「史上最高」，無離群保護，見 docs/RFQ/⑮Dataset驗證矩陣.md 根因B）已移除，
+	 * 改用本方法在 Java 端算穩健單價，方法改名符實。
+	 * 也供 RFQ⑤-A 市購件 price book 推導 job 共用（元件料號 pmn04，非委外工序代買價
 	 * pmn41/pmn46，兩者用途不同，見 docs/RFQ/Forge回覆_實際成本驗證.md）。
-	 * 沿用既有 codebase 慣例（見 WorkOrderRepository 多處 pmn 子查詢）：MAX(pmn31) WHERE pmn31 &gt; 0。
-	 */
-	@Query(value = """
-			SELECT MAX(n.pmn31)
-			FROM pmn_file n
-			WHERE n.pmn04 = :partNo AND n.pmn31 > 0
-			""", nativeQuery = true)
-	BigDecimal findLatestMaterialUnitPrice(@Param("partNo") String partNo);
-
-	/**
-	 * RFQ⑤-A 市購件 price book 推導 job——單一料號的採購紀錄明細（單價/數量/單頭日期），
-	 * 供 Java 端做「近12月加權均→無則退歷來最新+標stale」與 3σ 異常值排除。
 	 * row[0] price(pmn31), row[1] qty(pmn20), row[2] orderDate(pmm04)
 	 */
 	@Query(value = """
