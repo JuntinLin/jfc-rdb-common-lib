@@ -75,6 +75,21 @@ public interface ImaRepository extends JpaRepository<ImaFile, String> {
     List<ImaFile> findSimilarItemCandidatesByTypePrefix(@Param("ima10Prefix") String ima10Prefix);
 
     /**
+     * RFQ⑰-③ 候選池效能：加缸徑粗篩，SQL 層先用 {@code REGEXP_LIKE} 縮小候選再進 Java 計分
+     * （⑯實測全量 23,944 筆／9~10秒／3.4MB，見 docs/RFQ/⑯驗收結果⋯.md）。
+     * {@code boreAlternation} 由呼叫端組出「缸徑±範圍內的整數值交替」regex（如
+     * {@code "[^0-9](44|45|46|...|82)[xX]"}），比對 ima02 常見「NNxNN」格式（如 63x100）。
+     * 只做效能用的粗篩，不是精準過濾——regex 沒命中的候選本來就不太可能是好配對，
+     * 但為了不誤刪真正相符的候選（格式不是這種的少數情況），呼叫端量到空結果時
+     * 須 fallback 回 {@link #findSimilarItemCandidatesByTypePrefix} 全量查詢，不要靜默回空。
+     */
+    @Query(value = "SELECT i.* FROM ima_file i WHERE i.ima10 LIKE :ima10Prefix "
+            + "AND (i.imaacti IS NULL OR i.imaacti = 'Y') "
+            + "AND REGEXP_LIKE(i.ima02, :boreAlternation)", nativeQuery = true)
+    List<ImaFile> findSimilarItemCandidatesByTypePrefixAndBoreRange(
+            @Param("ima10Prefix") String ima10Prefix, @Param("boreAlternation") String boreAlternation);
+
+    /**
      * RFQ⑪ Phase 1 軸心/活塞桿——候選集：料號字首 2S016、2N016、2V016 開頭（SOP 確認：2=半成品
      * 產品大類，S/N/V=其它分群碼一：標準1/便品修改/特殊），全歷史（含客製，比照 ⑬，不再
      * 只收標準），型別看 ima02 品名前綴（AIR_/OIL_/HYD_），不在這層過濾。

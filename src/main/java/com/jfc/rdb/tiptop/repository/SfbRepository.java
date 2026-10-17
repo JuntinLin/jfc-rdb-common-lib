@@ -31,6 +31,18 @@ public interface SfbRepository extends JpaRepository<SfbFile, String> {
 			""")
 	BigDecimal findWipInnerAmount(@Param("mano") String mano);
 
+	/**
+	 * RFQ⑰-②-1 改錨工單實際——該料號最近一張「完工入庫/結案」(sfb04 IN '7','8') 工單，
+	 * 其實際發料明細(sfs_file)當材料成本錨點來源，取代 BmbFile 理論用量。
+	 * sfb87='Y' 排壞（比照既有 {@link #findWipInnerAmount} 慣例）；sfb01 工單編號格式含日期
+	 * （如 T511-17060739），DESC 排序近似取最近一張。查無則回傳空（呼叫端 fallback 回現有
+	 * BmbFile 理論用量路徑，不是新的失敗狀態）。
+	 */
+	@Query(value = "SELECT * FROM (SELECT s.* FROM sfb_file s WHERE s.sfb05 = :partNo "
+			+ "AND s.sfb04 IN ('7','8') AND s.sfb87 = 'Y' ORDER BY s.sfb01 DESC) WHERE ROWNUM = 1",
+			nativeQuery = true)
+	Optional<SfbFile> findLatestCompletedWorkOrder(@Param("partNo") String partNo);
+
 	//sfb02	number(5)	工單型態	"工單型態 儲存該工單所屬類別型態,正確值 1/2/5/7/11/12/13/15,
     //  1: 一般工單 / 5: 再加工工單 / 7: 委外工單 / 8: 重工委外工單 #Add By Snow 
     //  11: 拆件式工單 / 13: 預測工單 / 15: 試產工單

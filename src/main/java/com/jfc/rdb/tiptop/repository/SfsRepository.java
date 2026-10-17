@@ -35,4 +35,19 @@ public interface SfsRepository extends JpaRepository<SfsFile, SfsFilePK> {
 			""")
 	BigDecimal findSendingAmount(@Param("mano") String mano, @Param("beginDate") Date beginDate,
 			@Param("endDate") Date endDate);
+
+	/**
+	 * RFQ⑰-②-1 改錨工單實際——指定工單的實際發料明細（sfs04=元件料號／sfs05=發料數量），
+	 * 取代 BmbFile 理論用量(bmb06)，見 SimilarItemService.resolveMaterialCostFromActualIssuance。
+	 * 只收已確認扣帳（sfpconf='Y'），比照既有 {@link #findSendingAmount} 慣例。
+	 * row[0]=componentPartNo(sfs04), row[1]=issuedQty(sfs05)
+	 */
+	@Query("""
+			SELECT s.sfs04, s.sfs05
+			FROM SfsFile s
+			LEFT JOIN s.sfp sfp
+			WHERE s.sfs03 = :workOrderNo
+			AND sfp.sfpconf = 'Y'
+			""")
+	java.util.List<Object[]> findActualIssuedMaterials(@Param("workOrderNo") String workOrderNo);
 }
