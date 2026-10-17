@@ -46,7 +46,7 @@ public interface SfsRepository extends JpaRepository<SfsFile, SfsFilePK> {
 			SELECT s.sfs04, s.sfs05
 			FROM SfsFile s
 			LEFT JOIN s.sfp sfp
-			WHERE s.sfs03 = :workOrderNo
+			WHERE s.sfb.sfb01 = :workOrderNo
 			AND sfp.sfpconf = 'Y'
 			""")
 	java.util.List<Object[]> findActualIssuedMaterials(@Param("workOrderNo") String workOrderNo);
