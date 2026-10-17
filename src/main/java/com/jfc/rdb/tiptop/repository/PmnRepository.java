@@ -42,10 +42,16 @@ public interface PmnRepository extends JpaRepository<PmnFile, PmnFilePK> {
 	 * 改用本方法在 Java 端算穩健單價，方法改名符實。
 	 * 也供 RFQ⑤-A 市購件 price book 推導 job 共用（元件料號 pmn04，非委外工序代買價
 	 * pmn41/pmn46，兩者用途不同，見 docs/RFQ/Forge回覆_實際成本驗證.md）。
-	 * row[0] price(pmn31), row[1] qty(pmn20), row[2] orderDate(pmm04)
+	 * row[0] price(pmn31), row[1] qty(pmn20), row[2] orderDate(pmm04), row[3] purchaseUnit(pmn07)
+	 * RFQ⑲：補 pmn07（採購單位）——連續性原料（如不銹鋼管）同一料號歷年採購常混用 M/MM
+	 * 等不同單位記價，直接拿 pmn31 混算會差 1000 倍（見
+	 * docs/RFQ/⑲Step-0結果_查到真正根因_採購單位pmn07混用.md 實測佐證：pmn88=pmn31×pmn20
+	 * 兩種單位各自數學自洽，2520元/M÷1000=2.52元/MM幾乎完全吻合，證實是單位混用非資料錯誤）。
+	 * Java 端（SimilarItemService.resolveRobustUnitPrice）用 pmn07 vs 元件自己的 ima25
+	 * 庫存單位做換算後才聚合，這裡只負責把欄位撈出來。
 	 */
 	@Query(value = """
-			SELECT n.pmn31, n.pmn20, mm.pmm04
+			SELECT n.pmn31, n.pmn20, mm.pmm04, n.pmn07
 			FROM pmn_file n
 			LEFT JOIN pmm_file mm ON mm.pmm01 = n.pmn01
 			WHERE n.pmn04 = :partNo AND n.pmn31 > 0
