@@ -875,15 +875,30 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      * 見 docs/RFQ/③施工brief_Forge提案定案.md Nimbus核准回覆🔴必修：
      * 不可用 Σ(distinct ecb48 by作業)，該作業序單價若五年間變過會被重複計入。
      * ecb JOIN 條件沿用既有慣例（ecb02=sfb.sfb06 / ecb03=shb.shb06，ima01優先、ima571備援）。
-     * row[0] totalMachiningCost, row[1] opCount
+     * RFQ⑳-②'：ecb1/ecb2 兩層皆 NULL（ECB_FILE 全系統 54.1% 費率缺填，非個案）時，
+     * 不再整序濾掉歸零——退「同工序代號(shb081，如車削/銑削/鑽孔) 的其他有效費率中位數」當兜底。
+     * shb081 是語意工序代號；brief 原文的 ecb03 僅是序號(對應 shb06)，用 shb081 分組語意上更準確。
+     * row[0] totalMachiningCost, row[1] opCount(含兜底行), row[2] fallbackOpCount(兜底行數，>0→machiningCostPartial)
      */
     @Query(value = """
-            SELECT SUM(t.price) AS totalMachiningCost, COUNT(*) AS opCount
+            SELECT SUM(COALESCE(t.price, t.fallback_price)) AS totalMachiningCost,
+                   SUM(CASE WHEN COALESCE(t.price, t.fallback_price) IS NOT NULL THEN 1 ELSE 0 END) AS opCount,
+                   SUM(CASE WHEN t.price IS NULL AND t.fallback_price IS NOT NULL THEN 1 ELSE 0 END) AS fallbackOpCount
             FROM (
-                SELECT y.op_seq, y.price
+                SELECT y.op_seq, y.price, y.fallback_price
                 FROM (
                     SELECT shb.shb06 AS op_seq,
                            COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
+                           CASE WHEN COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) IS NULL THEN (
+                               SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e.ecb48)
+                               FROM ecb_file e
+                               JOIN sfb_file sfb2 ON sfb2.sfb06 = e.ecb02 AND sfb2.sfbacti = 'Y'
+                               JOIN shb_file shb2 ON shb2.shb05 = sfb2.sfb01 AND shb2.shb06 = e.ecb03
+                                                   AND shb2.shbacti = 'Y' AND shb2.shb081 = shb.shb081
+                               LEFT JOIN ima_file ima2 ON ima2.ima01 = sfb2.sfb05
+                               WHERE e.ecbacti = 'Y' AND e.ecb48 > 0
+                                 AND (e.ecb01 = ima2.ima01 OR e.ecb01 = ima2.ima571)
+                           ) END AS fallback_price,
                            ROW_NUMBER() OVER (
                                PARTITION BY shb.shb06
                                ORDER BY shb.shb03 DESC, shb.shb031 DESC
@@ -904,7 +919,6 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                 ) y
                 WHERE y.rn = 1
             ) t
-            WHERE t.price IS NOT NULL
             """, nativeQuery = true)
     List<Object[]> findSimilarItemMachiningCost(@Param("partNo") String partNo);
 
@@ -912,15 +926,29 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      * RFQ⑥ 階段二精算——單顆歷史加工成本逐作業序明細（展開 findSimilarItemMachiningCost 的丟棄明細）。
      * 沿用完全相同的 WHERE/JOIN/ROW_NUMBER 邏輯，逐作業序相加須與該既有查詢的總額一致（見
      * docs/RFQ/⑥階段二精算_task_brief.md，回報須附對帳）。
-     * row[0] opSeq(shb06), row[1] opCode(shb081), row[2] opName(shb082), row[3] latestUnitPrice
+     * RFQ⑳-②'：price 缺值時以 fallback_price（同工序代號歷史中位數）頂上，is_fallback='Y' 標記，
+     * 絕不留 price=NULL 的行靜默歸零（仍湊不出中位數的極端情況才會真的是 NULL，交上層標 partial）。
+     * row[0] opSeq(shb06), row[1] opCode(shb081), row[2] opName(shb082), row[3] unitPrice, row[4] isFallback(Y/N)
      */
     @Query(value = """
-            SELECT y.op_seq, y.op_code, y.op_name, y.price
+            SELECT y.op_seq, y.op_code, y.op_name,
+                   COALESCE(y.price, y.fallback_price) AS unit_price,
+                   CASE WHEN y.price IS NULL AND y.fallback_price IS NOT NULL THEN 'Y' ELSE 'N' END AS is_fallback
             FROM (
                 SELECT shb.shb06 AS op_seq,
                        shb.shb081 AS op_code,
                        shb.shb082 AS op_name,
                        COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
+                       CASE WHEN COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) IS NULL THEN (
+                           SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e.ecb48)
+                           FROM ecb_file e
+                           JOIN sfb_file sfb2 ON sfb2.sfb06 = e.ecb02 AND sfb2.sfbacti = 'Y'
+                           JOIN shb_file shb2 ON shb2.shb05 = sfb2.sfb01 AND shb2.shb06 = e.ecb03
+                                               AND shb2.shbacti = 'Y' AND shb2.shb081 = shb.shb081
+                           LEFT JOIN ima_file ima2 ON ima2.ima01 = sfb2.sfb05
+                           WHERE e.ecbacti = 'Y' AND e.ecb48 > 0
+                             AND (e.ecb01 = ima2.ima01 OR e.ecb01 = ima2.ima571)
+                       ) END AS fallback_price,
                        ROW_NUMBER() OVER (
                            PARTITION BY shb.shb06
                            ORDER BY shb.shb03 DESC, shb.shb031 DESC
@@ -939,7 +967,7 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                                         AND ecb1.ecb48 IS NULL
                 WHERE sfb.sfb05 = :partNo AND sfb.sfbacti = 'Y'
             ) y
-            WHERE y.rn = 1 AND y.price IS NOT NULL
+            WHERE y.rn = 1
             ORDER BY y.op_seq
             """, nativeQuery = true)
     List<Object[]> findSimilarItemMachiningCostDetail(@Param("partNo") String partNo);
