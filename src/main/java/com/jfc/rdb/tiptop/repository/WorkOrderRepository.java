@@ -878,6 +878,11 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      * RFQ⑳-②'：ecb1/ecb2 兩層皆 NULL（ECB_FILE 全系統 54.1% 費率缺填，非個案）時，
      * 不再整序濾掉歸零——退「同工序代號(shb081，如車削/銑削/鑽孔) 的其他有效費率中位數」當兜底。
      * shb081 是語意工序代號；brief 原文的 ecb03 僅是序號(對應 shb06)，用 shb081 分組語意上更準確。
+     * 兜底用 LEFT JOIN 一個按 shb081 預先 GROUP BY 算中位數的衍生表（而非 SELECT 清單內的
+     * correlated subquery）——實測 correlated subquery 引用外層 shb.shb081 會噴
+     * ORA-00904 invalid identifier（Oracle 對巢狀 SELECT 清單內子查詢的外層欄位可見性比
+     * WHERE子句限制更嚴，不同 Oracle 版本/巢狀深度行為不一致），改衍生表 JOIN 完全避開
+     * 這個 correlation 問題，順便一次 GROUP BY 算完比逐列重跑子查詢效能更好。
      * row[0] totalMachiningCost, row[1] opCount(含兜底行), row[2] fallbackOpCount(兜底行數，>0→machiningCostPartial)
      */
     @Query(value = """
@@ -889,16 +894,7 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                 FROM (
                     SELECT shb.shb06 AS op_seq,
                            COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
-                           CASE WHEN COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) IS NULL THEN (
-                               SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e.ecb48)
-                               FROM ecb_file e
-                               JOIN sfb_file sfb2 ON sfb2.sfb06 = e.ecb02 AND sfb2.sfbacti = 'Y'
-                               JOIN shb_file shb2 ON shb2.shb05 = sfb2.sfb01 AND shb2.shb06 = e.ecb03
-                                                   AND shb2.shbacti = 'Y' AND shb2.shb081 = shb.shb081
-                               LEFT JOIN ima_file ima2 ON ima2.ima01 = sfb2.sfb05
-                               WHERE e.ecbacti = 'Y' AND e.ecb48 > 0
-                                 AND (e.ecb01 = ima2.ima01 OR e.ecb01 = ima2.ima571)
-                           ) END AS fallback_price,
+                           fb.fb_price AS fallback_price,
                            ROW_NUMBER() OVER (
                                PARTITION BY shb.shb06
                                ORDER BY shb.shb03 DESC, shb.shb031 DESC
@@ -915,6 +911,18 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                                             AND ecb2.ecb03 = shb.shb06
                                             AND ecb2.ecbacti = 'Y'
                                             AND ecb1.ecb48 IS NULL
+                    LEFT JOIN (
+                        SELECT shb3.shb081 AS fb_opcode,
+                               PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e3.ecb48) AS fb_price
+                        FROM ecb_file e3
+                        JOIN sfb_file sfb3 ON sfb3.sfb06 = e3.ecb02 AND sfb3.sfbacti = 'Y'
+                        JOIN shb_file shb3 ON shb3.shb05 = sfb3.sfb01 AND shb3.shb06 = e3.ecb03
+                                            AND shb3.shbacti = 'Y'
+                        LEFT JOIN ima_file ima3 ON ima3.ima01 = sfb3.sfb05
+                        WHERE e3.ecbacti = 'Y' AND e3.ecb48 > 0
+                          AND (e3.ecb01 = ima3.ima01 OR e3.ecb01 = ima3.ima571)
+                        GROUP BY shb3.shb081
+                    ) fb ON fb.fb_opcode = shb.shb081
                     WHERE sfb.sfb05 = :partNo AND sfb.sfbacti = 'Y'
                 ) y
                 WHERE y.rn = 1
@@ -926,8 +934,9 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      * RFQ⑥ 階段二精算——單顆歷史加工成本逐作業序明細（展開 findSimilarItemMachiningCost 的丟棄明細）。
      * 沿用完全相同的 WHERE/JOIN/ROW_NUMBER 邏輯，逐作業序相加須與該既有查詢的總額一致（見
      * docs/RFQ/⑥階段二精算_task_brief.md，回報須附對帳）。
-     * RFQ⑳-②'：price 缺值時以 fallback_price（同工序代號歷史中位數）頂上，is_fallback='Y' 標記，
-     * 絕不留 price=NULL 的行靜默歸零（仍湊不出中位數的極端情況才會真的是 NULL，交上層標 partial）。
+     * RFQ⑳-②'：price 缺值時以 fallback_price（同工序代號歷史中位數，LEFT JOIN 衍生表算出，
+     * 見 findSimilarItemMachiningCost 同款修正說明）頂上，is_fallback='Y' 標記，絕不留
+     * price=NULL 的行靜默歸零（仍湊不出中位數的極端情況才會真的是 NULL，交上層標 partial）。
      * row[0] opSeq(shb06), row[1] opCode(shb081), row[2] opName(shb082), row[3] unitPrice, row[4] isFallback(Y/N)
      */
     @Query(value = """
@@ -939,16 +948,7 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                        shb.shb081 AS op_code,
                        shb.shb082 AS op_name,
                        COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
-                       CASE WHEN COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) IS NULL THEN (
-                           SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e.ecb48)
-                           FROM ecb_file e
-                           JOIN sfb_file sfb2 ON sfb2.sfb06 = e.ecb02 AND sfb2.sfbacti = 'Y'
-                           JOIN shb_file shb2 ON shb2.shb05 = sfb2.sfb01 AND shb2.shb06 = e.ecb03
-                                               AND shb2.shbacti = 'Y' AND shb2.shb081 = shb.shb081
-                           LEFT JOIN ima_file ima2 ON ima2.ima01 = sfb2.sfb05
-                           WHERE e.ecbacti = 'Y' AND e.ecb48 > 0
-                             AND (e.ecb01 = ima2.ima01 OR e.ecb01 = ima2.ima571)
-                       ) END AS fallback_price,
+                       fb.fb_price AS fallback_price,
                        ROW_NUMBER() OVER (
                            PARTITION BY shb.shb06
                            ORDER BY shb.shb03 DESC, shb.shb031 DESC
@@ -965,6 +965,18 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                                         AND ecb2.ecb03 = shb.shb06
                                         AND ecb2.ecbacti = 'Y'
                                         AND ecb1.ecb48 IS NULL
+                LEFT JOIN (
+                    SELECT shb3.shb081 AS fb_opcode,
+                           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e3.ecb48) AS fb_price
+                    FROM ecb_file e3
+                    JOIN sfb_file sfb3 ON sfb3.sfb06 = e3.ecb02 AND sfb3.sfbacti = 'Y'
+                    JOIN shb_file shb3 ON shb3.shb05 = sfb3.sfb01 AND shb3.shb06 = e3.ecb03
+                                        AND shb3.shbacti = 'Y'
+                    LEFT JOIN ima_file ima3 ON ima3.ima01 = sfb3.sfb05
+                    WHERE e3.ecbacti = 'Y' AND e3.ecb48 > 0
+                      AND (e3.ecb01 = ima3.ima01 OR e3.ecb01 = ima3.ima571)
+                    GROUP BY shb3.shb081
+                ) fb ON fb.fb_opcode = shb.shb081
                 WHERE sfb.sfb05 = :partNo AND sfb.sfbacti = 'Y'
             ) y
             WHERE y.rn = 1
