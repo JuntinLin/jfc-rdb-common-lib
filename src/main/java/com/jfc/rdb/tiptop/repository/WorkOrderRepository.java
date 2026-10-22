@@ -871,84 +871,26 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
             @Param("endDate") Date endDate);
 
     /**
-     * RFQ③ 歷史相似品比對——單顆歷史加工成本：每作業序(shb06)取「最新一筆」ecb48後跨作業序相加。
+     * RFQ③ 歷史相似品比對——單顆歷史加工成本逐作業序明細：每作業序(shb06)取「最新一筆」ecb48。
      * 見 docs/RFQ/③施工brief_Forge提案定案.md Nimbus核准回覆🔴必修：
      * 不可用 Σ(distinct ecb48 by作業)，該作業序單價若五年間變過會被重複計入。
      * ecb JOIN 條件沿用既有慣例（ecb02=sfb.sfb06 / ecb03=shb.shb06，ima01優先、ima571備援）。
-     * RFQ⑳-②'：ecb1/ecb2 兩層皆 NULL（ECB_FILE 全系統 54.1% 費率缺填，非個案）時，
-     * 不再整序濾掉歸零——退「同工序代號(shb081，如車削/銑削/鑽孔) 的其他有效費率中位數」當兜底。
-     * shb081 是語意工序代號；brief 原文的 ecb03 僅是序號(對應 shb06)，用 shb081 分組語意上更準確。
-     * 兜底用 LEFT JOIN 一個按 shb081 預先 GROUP BY 算中位數的衍生表（而非 SELECT 清單內的
-     * correlated subquery）——實測 correlated subquery 引用外層 shb.shb081 會噴
-     * ORA-00904 invalid identifier（Oracle 對巢狀 SELECT 清單內子查詢的外層欄位可見性比
-     * WHERE子句限制更嚴，不同 Oracle 版本/巢狀深度行為不一致），改衍生表 JOIN 完全避開
-     * 這個 correlation 問題，順便一次 GROUP BY 算完比逐列重跑子查詢效能更好。
-     * row[0] totalMachiningCost, row[1] opCount(含兜底行), row[2] fallbackOpCount(兜底行數，>0→machiningCostPartial)
+     * RFQ㉑：ecb1/ecb2 兩層皆 NULL 時**不在 SQL 內兜底**（REMOVED ⑳-②' 的即時 GROUP BY
+     * 兜底——正式站實測每請求即時算全系統中位數要 30~60s，Ø180×1020 真實進件直接逾時，
+     * 是 P0 事故）。price 可為 NULL，**交 Java 端用 {@link EcbRateMedianRepository} 查
+     * 預先算好的快取表**（{@code autobom_ecb_rate_median}，見
+     * {@code EcbRateMedianDerivationService}），O(1) 查表取代每請求即時 GROUP BY。
+     * 此查詢不再過濾 price IS NOT NULL（原⑥用途的 filter 移除），讓 NULL 列也回傳，
+     * Java 端才能看到 op_code 去查快取表。
+     * row[0] opSeq(shb06), row[1] opCode(shb081), row[2] opName(shb082), row[3] directUnitPrice(可為null)
      */
     @Query(value = """
-            SELECT SUM(COALESCE(t.price, t.fallback_price)) AS totalMachiningCost,
-                   SUM(CASE WHEN COALESCE(t.price, t.fallback_price) IS NOT NULL THEN 1 ELSE 0 END) AS opCount,
-                   SUM(CASE WHEN t.price IS NULL AND t.fallback_price IS NOT NULL THEN 1 ELSE 0 END) AS fallbackOpCount
-            FROM (
-                SELECT y.op_seq, y.price, y.fallback_price
-                FROM (
-                    SELECT shb.shb06 AS op_seq,
-                           COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
-                           fb.fb_price AS fallback_price,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY shb.shb06
-                               ORDER BY shb.shb03 DESC, shb.shb031 DESC
-                           ) AS rn
-                    FROM sfb_file sfb
-                    JOIN shb_file shb ON shb.shb05 = sfb.sfb01 AND shb.shbacti = 'Y'
-                    LEFT JOIN ima_file ima ON ima.ima01 = sfb.sfb05
-                    LEFT JOIN ecb_file ecb1 ON ecb1.ecb01 = ima.ima01
-                                            AND ecb1.ecb02 = sfb.sfb06
-                                            AND ecb1.ecb03 = shb.shb06
-                                            AND ecb1.ecbacti = 'Y'
-                    LEFT JOIN ecb_file ecb2 ON ecb2.ecb01 = ima.ima571
-                                            AND ecb2.ecb02 = sfb.sfb06
-                                            AND ecb2.ecb03 = shb.shb06
-                                            AND ecb2.ecbacti = 'Y'
-                                            AND ecb1.ecb48 IS NULL
-                    LEFT JOIN (
-                        SELECT shb3.shb081 AS fb_opcode,
-                               PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e3.ecb48) AS fb_price
-                        FROM ecb_file e3
-                        JOIN sfb_file sfb3 ON sfb3.sfb06 = e3.ecb02 AND sfb3.sfbacti = 'Y'
-                        JOIN shb_file shb3 ON shb3.shb05 = sfb3.sfb01 AND shb3.shb06 = e3.ecb03
-                                            AND shb3.shbacti = 'Y'
-                        LEFT JOIN ima_file ima3 ON ima3.ima01 = sfb3.sfb05
-                        WHERE e3.ecbacti = 'Y' AND e3.ecb48 > 0
-                          AND (e3.ecb01 = ima3.ima01 OR e3.ecb01 = ima3.ima571)
-                        GROUP BY shb3.shb081
-                    ) fb ON fb.fb_opcode = shb.shb081
-                    WHERE sfb.sfb05 = :partNo AND sfb.sfbacti = 'Y'
-                ) y
-                WHERE y.rn = 1
-            ) t
-            """, nativeQuery = true)
-    List<Object[]> findSimilarItemMachiningCost(@Param("partNo") String partNo);
-
-    /**
-     * RFQ⑥ 階段二精算——單顆歷史加工成本逐作業序明細（展開 findSimilarItemMachiningCost 的丟棄明細）。
-     * 沿用完全相同的 WHERE/JOIN/ROW_NUMBER 邏輯，逐作業序相加須與該既有查詢的總額一致（見
-     * docs/RFQ/⑥階段二精算_task_brief.md，回報須附對帳）。
-     * RFQ⑳-②'：price 缺值時以 fallback_price（同工序代號歷史中位數，LEFT JOIN 衍生表算出，
-     * 見 findSimilarItemMachiningCost 同款修正說明）頂上，is_fallback='Y' 標記，絕不留
-     * price=NULL 的行靜默歸零（仍湊不出中位數的極端情況才會真的是 NULL，交上層標 partial）。
-     * row[0] opSeq(shb06), row[1] opCode(shb081), row[2] opName(shb082), row[3] unitPrice, row[4] isFallback(Y/N)
-     */
-    @Query(value = """
-            SELECT y.op_seq, y.op_code, y.op_name,
-                   COALESCE(y.price, y.fallback_price) AS unit_price,
-                   CASE WHEN y.price IS NULL AND y.fallback_price IS NOT NULL THEN 'Y' ELSE 'N' END AS is_fallback
+            SELECT y.op_seq, y.op_code, y.op_name, y.price
             FROM (
                 SELECT shb.shb06 AS op_seq,
                        shb.shb081 AS op_code,
                        shb.shb082 AS op_name,
                        COALESCE(NULLIF(ecb1.ecb48, 0), NULLIF(ecb2.ecb48, 0)) AS price,
-                       fb.fb_price AS fallback_price,
                        ROW_NUMBER() OVER (
                            PARTITION BY shb.shb06
                            ORDER BY shb.shb03 DESC, shb.shb031 DESC
@@ -965,23 +907,33 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
                                         AND ecb2.ecb03 = shb.shb06
                                         AND ecb2.ecbacti = 'Y'
                                         AND ecb1.ecb48 IS NULL
-                LEFT JOIN (
-                    SELECT shb3.shb081 AS fb_opcode,
-                           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e3.ecb48) AS fb_price
-                    FROM ecb_file e3
-                    JOIN sfb_file sfb3 ON sfb3.sfb06 = e3.ecb02 AND sfb3.sfbacti = 'Y'
-                    JOIN shb_file shb3 ON shb3.shb05 = sfb3.sfb01 AND shb3.shb06 = e3.ecb03
-                                        AND shb3.shbacti = 'Y'
-                    LEFT JOIN ima_file ima3 ON ima3.ima01 = sfb3.sfb05
-                    WHERE e3.ecbacti = 'Y' AND e3.ecb48 > 0
-                      AND (e3.ecb01 = ima3.ima01 OR e3.ecb01 = ima3.ima571)
-                    GROUP BY shb3.shb081
-                ) fb ON fb.fb_opcode = shb.shb081
                 WHERE sfb.sfb05 = :partNo AND sfb.sfbacti = 'Y'
             ) y
             WHERE y.rn = 1
             ORDER BY y.op_seq
             """, nativeQuery = true)
     List<Object[]> findSimilarItemMachiningCostDetail(@Param("partNo") String partNo);
+
+    /**
+     * RFQ㉑ EcbRateMedianDerivationService 專用——全系統一次 GROUP BY 算「同工序代號(shb081)
+     * 歷史有效費率(ecb48>0)中位數」，寫入 {@code autobom_ecb_rate_median} 快取表（on-demand
+     * 觸發，比照⑤-A/⑤-C，不用排程）。只在 refresh 時跑一次，不在請求路徑上。
+     * row[0] opcode(shb081), row[1] medianRate, row[2] sampleCount
+     */
+    @Query(value = """
+            SELECT shb3.shb081 AS opcode,
+                   PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e3.ecb48) AS median_rate,
+                   COUNT(*) AS sample_count
+            FROM ecb_file e3
+            JOIN sfb_file sfb3 ON sfb3.sfb06 = e3.ecb02 AND sfb3.sfbacti = 'Y'
+            JOIN shb_file shb3 ON shb3.shb05 = sfb3.sfb01 AND shb3.shb06 = e3.ecb03
+                                AND shb3.shbacti = 'Y'
+            LEFT JOIN ima_file ima3 ON ima3.ima01 = sfb3.sfb05
+            WHERE e3.ecbacti = 'Y' AND e3.ecb48 > 0
+              AND (e3.ecb01 = ima3.ima01 OR e3.ecb01 = ima3.ima571)
+              AND shb3.shb081 IS NOT NULL
+            GROUP BY shb3.shb081
+            """, nativeQuery = true)
+    List<Object[]> findEcbRateMedianByOpcode();
 
 }
