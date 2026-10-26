@@ -208,7 +208,8 @@ ecm316	number(15,3)	工單轉出量       (-)
                 p.sfb92 AS parentManufactureNoticeSeq,	
                 -- 使用 COALESCE 優先取銷售訂單日期，若無則取製造通知單日期
                 COALESCE(b.oeb15, g.ksg04,pb.oeb15, pg.ksg04) AS promisedDeliveryDate,	-- row[28]
-                COALESCE(b.ta_oeb15, pb.ta_oeb15) AS extendedDeliveryDate -- row[29]
+                COALESCE(b.ta_oeb15, pb.ta_oeb15) AS extendedDeliveryDate, -- row[29]
+                d.eca02 AS eca02 -- row[30] 工作站說明（WipService.mapToWipDetailDTO 讀 row[30]，與 WithDateFilter 版一致）
             FROM sfb_file a
             left outer join oeb_file b on a.sfb22 = b.oeb01 and a.sfb221 = b.oeb03
             LEFT OUTER JOIN ksg_file g ON a.sfb91 = g.ksg01 AND a.sfb92 = g.ksg02
