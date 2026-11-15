@@ -439,7 +439,10 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
      * 空油壓缸入庫金額（按入庫月份彙總）
      * ima06 IN ('130','140') 油壓缸+空壓缸；訂單工單或製造通知(KSG)工單（不含純庫存工單）
      * 其餘條件比照 lattsi「完工入庫金額統計」：已確認、已過帳、入庫料號前兩碼 '00' 不計（2021-05-31 規則）
-     * 單價順序：訂單單價 oeb13×匯率 → 同料號最近一筆有單價歷史訂單（無訂單或訂單單價 0 時；排除 336 單別）→ 0
+     * 單價：掛訂單（sfb22）→ 訂單單價 oeb13×匯率，單價 0 或訂單項次不存在就是 0，不借歷史價；
+     *       只掛製造通知單（sfb91）→ 同料號最近一筆有單價歷史訂單（排除 336 單別）→ 0
+     *       （比照 lattsi StatisticDAO 的 if/else-if：有 sfb22 就不走歷史價。2026-11-16 修正：原本單價 0 也借歷史價，
+     *        套裝子項若另有單賣紀錄會被重複計價，lattsi session 掃 2025-11~2026-11 共 24 筆、多算 338,502.9）
      * 計價料號 = COALESCE(訂單品項料號 oeb04, 入庫料號 sfv04)
      *
      * 2026-10-11 曾比照組立課產值加 axmi121 訂價 ima127 補零單價，2026-11-16 移除：
@@ -468,7 +471,7 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             JOIN oea_file oa ON oa.oea01 = ob.oeb01
             WHERE ob.oeb13 > 0 AND SUBSTR(ob.oeb01, 2, 3) != '336'
         ) hist ON hist.oeb04 = COALESCE(oeb.oeb04, sfv.sfv04) AND hist.rn = 1
-              AND (oeb.oeb01 IS NULL OR NVL(oeb.oeb13, 0) = 0)
+              AND sfb.sfb22 IS NULL
         WHERE sfu.sfuconf = 'Y' AND sfu.sfupost = 'Y'
           AND ima.ima06 IN ('130', '140')
           AND NOT (sfb.sfb22 IS NULL AND sfb.sfb91 IS NULL)
