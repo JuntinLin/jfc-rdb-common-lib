@@ -41,5 +41,8 @@ public class Employee {
     @Column(name = "LevelId")
     private String levelId; //LevelId	職等代號	String
 
+    @Column(name = "CountryId")
+    private String countryId; //CountryId	國籍代碼(TW=本國籍，其他為外籍，含外勞)	String
+
     private Boolean flag; //Flag	是否有效	Boolean
 }

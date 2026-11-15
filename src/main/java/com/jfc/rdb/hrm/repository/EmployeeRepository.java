@@ -197,4 +197,10 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
            "AND (e.lastWorkDate > CURRENT_TIMESTAMP OR e.lastWorkDate IS NULL) " +
            "ORDER BY e.employeeCode")
     List<Employee> findByDirectorId(@Param("directorId") UUID directorId);
+
+    /**
+     * 查詢指定期間內離職的員工（LastWorkDate 落在區間內），用於產銷會議人力週報
+     */
+    @Query("SELECT e FROM Employee e WHERE e.flag = true AND e.lastWorkDate BETWEEN :start AND :end ORDER BY e.lastWorkDate DESC")
+    List<Employee> findDepartedBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
 }
