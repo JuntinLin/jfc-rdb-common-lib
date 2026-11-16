@@ -440,7 +440,10 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
      * ima06 IN ('130','140') 油壓缸+空壓缸；訂單工單或製造通知(KSG)工單（不含純庫存工單）
      * 其餘條件比照 lattsi「完工入庫金額統計」：已確認、已過帳、入庫料號前兩碼 '00' 不計（2021-05-31 規則）
      * 單價：掛訂單（sfb22）→ 訂單單價 oeb13×匯率，單價 0 或訂單項次不存在就是 0，不借歷史價；
-     *       只掛製造通知單（sfb91）→ 同料號最近一筆有單價歷史訂單（排除 336 單別）→ 0
+     *       只掛製造通知單（sfb91）→ 同料號、約定交貨日 oeb15 ≤ 入庫日 sfu02 的最近一筆有單價歷史訂單（排除 336 單別）→ 0
+     *       （2026-11-16 加入 ≤ 入庫日上限：原本不設限，回頭算舊月份會吃到入庫之後才接的新單價，
+     *        已公布月份的數字會隨新訂單漂移。lattsi 用 ksg04 預計完工日當上限，此處改用實際入庫日——
+     *        與統計月份一致；13 個月合計約 37.86M → 33.69M，經使用者核可）
      *       （比照 lattsi StatisticDAO 的 if/else-if：有 sfb22 就不走歷史價。2026-11-16 修正：原本單價 0 也借歷史價，
      *        套裝子項若另有單賣紀錄會被重複計價，lattsi session 掃 2025-11~2026-11 共 24 筆、多算 338,502.9）
      * 計價料號 = COALESCE(訂單品項料號 oeb04, 入庫料號 sfv04)
@@ -456,22 +459,23 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
     @Query(value = """
         SELECT
             TO_CHAR(TRUNC(sfu.sfu02, 'MM'), 'YYYY-MM') AS yearMonth,
-            NVL(SUM(sfv.sfv09 * COALESCE(NULLIF(oeb.oeb13, 0) * NVL(oea.oea24, 1),
-                                         hist.unit_price, 0)), 0) AS amount
+            NVL(SUM(sfv.sfv09 * CASE
+                WHEN sfb.sfb22 IS NOT NULL THEN NVL(oeb.oeb13, 0) * NVL(oea.oea24, 1)
+                ELSE NVL((
+                    SELECT MAX(ob.oeb13 * NVL(oa.oea24, 1)) KEEP (DENSE_RANK LAST ORDER BY ob.oeb15)
+                    FROM oeb_file ob
+                    JOIN oea_file oa ON oa.oea01 = ob.oeb01
+                    WHERE ob.oeb04 = sfv.sfv04
+                      AND ob.oeb13 > 0 AND SUBSTR(ob.oeb01, 2, 3) != '336'
+                      AND ob.oeb15 <= sfu.sfu02
+                ), 0)
+            END), 0) AS amount
         FROM sfv_file sfv
         INNER JOIN sfu_file sfu ON sfu.sfu01 = sfv.sfv01
         INNER JOIN sfb_file sfb ON sfb.sfb01 = sfv.sfv11
         INNER JOIN ima_file ima ON ima.ima01 = sfv.sfv04
         LEFT JOIN oeb_file oeb ON oeb.oeb01 = sfb.sfb22 AND oeb.oeb03 = sfb.sfb221
         LEFT JOIN oea_file oea ON oea.oea01 = oeb.oeb01
-        LEFT JOIN (
-            SELECT ob.oeb04, ob.oeb13 * NVL(oa.oea24, 1) AS unit_price,
-                   ROW_NUMBER() OVER (PARTITION BY ob.oeb04 ORDER BY ob.oeb15 DESC) AS rn
-            FROM oeb_file ob
-            JOIN oea_file oa ON oa.oea01 = ob.oeb01
-            WHERE ob.oeb13 > 0 AND SUBSTR(ob.oeb01, 2, 3) != '336'
-        ) hist ON hist.oeb04 = COALESCE(oeb.oeb04, sfv.sfv04) AND hist.rn = 1
-              AND sfb.sfb22 IS NULL
         WHERE sfu.sfuconf = 'Y' AND sfu.sfupost = 'Y'
           AND ima.ima06 IN ('130', '140')
           AND NOT (sfb.sfb22 IS NULL AND sfb.sfb91 IS NULL)
