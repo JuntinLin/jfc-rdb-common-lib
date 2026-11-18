@@ -313,7 +313,9 @@ public interface DeliveryEstimateRepository extends JpaRepository<OebFile, OebFi
             ogb.ogb50,	--row[10]累計簽收數量
             ogb.ogb13,	--row[11]原幣單價
             oga.oga24,	--row[12]匯率
-            NVL(ogb.ogb51, 0)	--row[13]累計銷退數量
+            NVL(ogb.ogb51, 0),	--row[13]累計銷退數量
+            ogb.ogb31,	--row[14]原訂單單號(oeb01)，業務列管/業務不管用訂單單號比對務必出貨清單
+            ogb.ogb32	--row[15]原訂單項次(oeb03)
         FROM ogb_file ogb
         INNER JOIN oga_file oga ON oga.oga01 = ogb.ogb01
         LEFT JOIN ima_file ima ON ima.ima01 = ogb.ogb04
