@@ -251,4 +251,63 @@ public interface OmaRepository extends JpaRepository<OmaFile, String> {
         "ORDER BY oma01 DESC"
     )
     List<Object[]> findReceivablesDetailsByCustomer(@Param("accountNumber") String customerCode);
+
+    /**
+     * 2026-11-25 不知名匯款比對：帳號比對到客戶代號後，在該客戶名下用金額縮小到具體發票。
+     * oma03='MISC' 時客戶代號不具唯一性（雜項客戶共用同一代號），改用 oma032（客戶簡稱）進一步篩選；
+     * 非 MISC 的正常客戶代號本身已唯一，customerName 條件以 OR 短路略過。
+     * ROWNUM 限制前50筆（舊版 Oracle 不支援 FETCH FIRST），按金額差距由小到大排序。
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT * FROM (
+                SELECT
+                    oma01 AS documentNumber,
+                    oma02 AS documentDate,
+                    oma03 AS customerCode,
+                    oma032 AS customerName,
+                    oma043 AS customerFullName,
+                    oma11 AS dueDate,
+                    oma61 AS openAmount,
+                    ABS(oma61 - :amount) AS diffAmount
+                FROM oma_file
+                WHERE omavoid = 'N'
+                  AND oma61 > 0
+                  AND oma18 = :accountNumber
+                  AND oma02 >= :sinceDate
+                  AND ABS(oma61 - :amount) <= :maxDiff
+                  AND oma03 = :customerCode
+                  AND (:customerCode != 'MISC' OR oma032 = :customerName)
+                ORDER BY ABS(oma61 - :amount), oma02 DESC
+            ) WHERE ROWNUM <= 50
+            """)
+    List<Object[]> findOpenItemsByAmountForCustomer(@Param("customerCode") String customerCode,
+            @Param("customerName") String customerName, @Param("amount") BigDecimal amount,
+            @Param("maxDiff") BigDecimal maxDiff, @Param("sinceDate") LocalDate sinceDate,
+            @Param("accountNumber") String accountNumber);
+
+    /**
+     * 2026-11-25 不知名匯款比對：帳號比對不到任何客戶時，全體未沖帳項目用金額比對當候選清單。
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT * FROM (
+                SELECT
+                    oma01 AS documentNumber,
+                    oma02 AS documentDate,
+                    oma03 AS customerCode,
+                    oma032 AS customerName,
+                    oma043 AS customerFullName,
+                    oma11 AS dueDate,
+                    oma61 AS openAmount,
+                    ABS(oma61 - :amount) AS diffAmount
+                FROM oma_file
+                WHERE omavoid = 'N'
+                  AND oma61 > 0
+                  AND oma18 = :accountNumber
+                  AND oma02 >= :sinceDate
+                  AND ABS(oma61 - :amount) <= :maxDiff
+                ORDER BY ABS(oma61 - :amount), oma02 DESC
+            ) WHERE ROWNUM <= 50
+            """)
+    List<Object[]> findOpenItemsByAmountAll(@Param("amount") BigDecimal amount, @Param("maxDiff") BigDecimal maxDiff,
+            @Param("sinceDate") LocalDate sinceDate, @Param("accountNumber") String accountNumber);
 }
