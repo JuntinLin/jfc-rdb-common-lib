@@ -310,4 +310,32 @@ public interface OmaRepository extends JpaRepository<OmaFile, String> {
             """)
     List<Object[]> findOpenItemsByAmountAll(@Param("amount") BigDecimal amount, @Param("maxDiff") BigDecimal maxDiff,
             @Param("sinceDate") LocalDate sinceDate, @Param("accountNumber") String accountNumber);
+
+    /**
+     * 2026-11-26 不知名匯款比對：同一客戶名下「彙總多筆未沖帳發票」的金額比對（不限單筆），
+     * 不做金額篩選，取該客戶名下全部未沖帳項目交給應用層做合計/組合比對。ROWNUM 限制前50筆避免單一客戶異常量大。
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT * FROM (
+                SELECT
+                    oma01 AS documentNumber,
+                    oma02 AS documentDate,
+                    oma03 AS customerCode,
+                    oma032 AS customerName,
+                    oma043 AS customerFullName,
+                    oma11 AS dueDate,
+                    oma61 AS openAmount
+                FROM oma_file
+                WHERE omavoid = 'N'
+                  AND oma61 > 0
+                  AND oma18 = :accountNumber
+                  AND oma02 >= :sinceDate
+                  AND oma03 = :customerCode
+                  AND (:customerCode != 'MISC' OR oma032 = :customerName)
+                ORDER BY oma02 DESC
+            ) WHERE ROWNUM <= 50
+            """)
+    List<Object[]> findAllOpenItemsForCustomer(@Param("customerCode") String customerCode,
+            @Param("customerName") String customerName, @Param("sinceDate") LocalDate sinceDate,
+            @Param("accountNumber") String accountNumber);
 }
