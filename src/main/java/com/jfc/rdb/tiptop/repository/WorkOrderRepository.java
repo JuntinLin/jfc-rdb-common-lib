@@ -437,7 +437,10 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
      *   - 製造通知單(KSG)工單無訂單 → 以工單料號 sfb05 找
      *   - 有訂單但訂單單價為 0（例 T331-26080482 項次 2/3）→ 以訂單品項料號 oeb04 找（2026-10-08 使用者指定）
      * 最後備援：計價料號的料件訂價 ima127（axmi121 本幣未稅訂價，業務員維護；本幣不乘匯率）（2026-10-09 使用者指定）
-     * 排除作業 05-D5（噴漆）
+     * 排除作業 05-D5（噴漆）、T07-A9（成品會驗）
+     *   T07-A9 是最後一道會驗製程，數量跟同工單先前的 T07-A 組立製程完全重複，
+     *   例 T511-26090313：T07-A2 11-23 報 24 支、T07-A9 11-26 又報 24 支（41,500/支 = 996,000 計兩次）。
+     *   2026-11-26 總經理裁示不計產值；lattsi StatisticDAO 已同步修正。
      * 多人報工按工時分攤
      *
      * row[0] employeeNo, row[1] employeeName,
@@ -499,7 +502,7 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
             LEFT JOIN gen_file gen ON gen.gen01 = shb.shb04
             WHERE shb.shbacti = 'Y'
               AND shb.shb03 BETWEEN :startDate AND :endDate
-              AND shb.shb081 != '05-D5'
+              AND shb.shb081 NOT IN ('05-D5', 'T07-A9')
               AND (:employeeNo IS NULL OR shb.shb04 = :employeeNo)
               AND gen.gen03 LIKE 'T235%'
             GROUP BY shb.shb04, gen.gen02, gen.gen03
@@ -575,7 +578,7 @@ public interface WorkOrderRepository extends JpaRepository<SfbFile, String> {
             LEFT JOIN gen_file gen ON gen.gen01 = shb.shb04
             WHERE shb.shbacti = 'Y'
               AND shb.shb03 BETWEEN :startDate AND :endDate
-              AND shb.shb081 != '05-D5'
+              AND shb.shb081 NOT IN ('05-D5', 'T07-A9')
               AND (shb.shb04 = :employeeNo OR (:employeeNo IS NULL AND gen.gen03 LIKE 'T235%'))
             ORDER BY shb.shb03, shb.shb05, shb.shb06
             """, nativeQuery = true)
